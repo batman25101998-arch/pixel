@@ -1,0 +1,78 @@
+"use client";
+
+import { FormEvent, useState } from "react";
+import { Save, Tag } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+
+type Hex = {
+  id: string;
+  h3Index: string;
+  message: string;
+  avatarUrl: string | null;
+  imageUrl: string | null;
+  status: "OWNED" | "FOR_SALE" | "LOCKED" | "BANNED" | "AVAILABLE";
+  priceCents: bigint | number;
+};
+
+export function HexEditor({ hex }: { hex: Hex }) {
+  const [saved, setSaved] = useState(false);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const price = Math.max(100, Math.round(Number(form.get("salePriceDollars")) * 100));
+    const response = await fetch(`/api/hexes/${hex.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: String(form.get("message")),
+        avatarUrl: String(form.get("avatarUrl") || "") || null,
+        imageUrl: String(form.get("imageUrl") || "") || null,
+        status: form.get("forSale") ? "FOR_SALE" : "OWNED",
+        priceCents: price
+      })
+    });
+    setSaved(response.ok);
+  }
+
+  return (
+    <form onSubmit={submit} className="rounded-lg border border-border bg-card p-4">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h3 className="break-all font-semibold">{hex.h3Index}</h3>
+        <span className="text-xs text-muted-foreground">{hex.status === "FOR_SALE" ? "For sale" : "Owned"}</span>
+      </div>
+      <div className="space-y-3">
+        <div className="space-y-1.5">
+          <Label>Message</Label>
+          <Textarea name="message" defaultValue={hex.message} maxLength={240} />
+        </div>
+        <div className="grid gap-3 md:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label>Avatar URL</Label>
+            <Input name="avatarUrl" defaultValue={hex.avatarUrl ?? ""} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Image URL</Label>
+            <Input name="imageUrl" defaultValue={hex.imageUrl ?? ""} />
+          </div>
+        </div>
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="flex h-10 items-center gap-2 rounded-md border border-border px-3 text-sm">
+            <input name="forSale" type="checkbox" defaultChecked={hex.status === "FOR_SALE"} />
+            List for resale
+          </label>
+          <div className="space-y-1.5">
+            <Label>Price</Label>
+            <Input name="salePriceDollars" type="number" min={1} step={1} defaultValue={Number(hex.priceCents) / 100} />
+          </div>
+          <Button><Save className="h-4 w-4" />Save</Button>
+          <Button type="button" variant="outline"><Tag className="h-4 w-4" />Territory-ready</Button>
+          {saved ? <span className="text-sm text-primary">Saved</span> : null}
+        </div>
+      </div>
+    </form>
+  );
+}
