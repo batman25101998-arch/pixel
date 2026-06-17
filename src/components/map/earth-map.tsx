@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import maplibregl, { Map, type ExpressionSpecification } from "maplibre-gl";
 import { useSession } from "next-auth/react";
 import { useMapStore } from "@/stores/map-store";
@@ -9,7 +9,7 @@ const sourceId = "earth-hexes";
 const hoverSourceId = "earth-hex-hover";
 const selectedSourceId = "earth-hex-selected";
 const fillLayerId = "earth-hexes-fill";
-const lineLayerId = "earth-hexes-line";
+const outlineLayerId = "earth-hexes-outline";
 const hoverFillLayerId = "earth-hex-hover-fill";
 const hoverLineLayerId = "earth-hex-hover-line";
 const selectedFillLayerId = "earth-hex-selected-fill";
@@ -17,7 +17,22 @@ const selectedLineLayerId = "earth-hex-selected-line";
 
 const darkMapStyle =
   process.env.NEXT_PUBLIC_MAP_STYLE_URL ??
-  "https://demotiles.maplibre.org/style.json";
+  "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json";
+
+const mockOverviewHexes = [
+  { left: "18%", top: "34%", color: "green", size: "md" },
+  { left: "22%", top: "40%", color: "blue", size: "sm" },
+  { left: "29%", top: "57%", color: "yellow", size: "sm" },
+  { left: "47%", top: "33%", color: "purple", size: "md" },
+  { left: "50%", top: "39%", color: "green", size: "sm" },
+  { left: "52%", top: "52%", color: "blue", size: "lg" },
+  { left: "59%", top: "42%", color: "yellow", size: "sm" },
+  { left: "65%", top: "34%", color: "blue", size: "md" },
+  { left: "70%", top: "46%", color: "green", size: "sm" },
+  { left: "77%", top: "62%", color: "purple", size: "md" },
+  { left: "35%", top: "29%", color: "blue", size: "sm" },
+  { left: "42%", top: "61%", color: "green", size: "sm" }
+] as const;
 
 function isLngLatCoordinate(value: unknown): value is [number, number] {
   return (
@@ -86,40 +101,67 @@ function validateGeoJsonResponse(value: unknown): value is GeoJSON.FeatureCollec
 function hexFillColorExpression(currentUserId: string): ExpressionSpecification {
   return [
     "case",
-    ["==", ["get", "status"], "AVAILABLE"],
-    "#334155",
-    ["==", ["get", "status"], "FOR_SALE"],
-    "#facc15",
-    ["==", ["get", "status"], "SPECIAL"],
-    "#8b5cf6",
-    ["==", ["get", "status"], "LOCKED"],
+    ["==", ["get", "status"], "MY_OWNED"],
     "#8b5cf6",
     ["all", ["!=", ["get", "status"], "AVAILABLE"], ["==", ["get", "ownerId"], currentUserId]],
-    "#22c55e",
+    "#8b5cf6",
+    ["==", ["get", "status"], "SPECIAL"],
+    "#a855f7",
+    ["==", ["get", "status"], "FOR_SALE"],
+    "#fbbf24",
+    ["==", ["get", "status"], "GREEN_OWNED"],
+    "#16a34a",
+    ["==", ["get", "status"], "OWNED"],
+    "#2563eb",
     "#2563eb"
   ] as ExpressionSpecification;
 }
 
-function hexLineColorExpression(currentUserId: string): ExpressionSpecification {
+function hexFillOpacityExpression(): ExpressionSpecification {
   return [
     "case",
+    ["all", ["==", ["get", "isPreview"], true], ["==", ["get", "status"], "AVAILABLE"]],
+    0.06,
     ["==", ["get", "status"], "AVAILABLE"],
-    "#94a3b8",
+    0.1,
+    0.72
+  ] as ExpressionSpecification;
+}
+
+function hexLineColorExpression(): ExpressionSpecification {
+  return [
+    "case",
+    ["==", ["get", "isLand"], false],
+    "#1e3a5f",
+    ["==", ["get", "status"], "AVAILABLE"],
+    "#7f9188",
     ["==", ["get", "status"], "FOR_SALE"],
-    "#facc15",
+    "#fde68a",
     ["==", ["get", "status"], "SPECIAL"],
-    "#8b5cf6",
-    ["==", ["get", "status"], "LOCKED"],
-    "#8b5cf6",
-    ["all", ["!=", ["get", "status"], "AVAILABLE"], ["==", ["get", "ownerId"], currentUserId]],
-    "#22c55e",
-    "#2563eb"
+    "#d8b4fe",
+    ["==", ["get", "status"], "MY_OWNED"],
+    "#c4b5fd",
+    ["==", ["get", "status"], "GREEN_OWNED"],
+    "#86efac",
+    "#93c5fd"
+  ] as ExpressionSpecification;
+}
+
+function hexLineOpacityExpression(): ExpressionSpecification {
+  return [
+    "case",
+    ["all", ["==", ["get", "isPreview"], true], ["==", ["get", "status"], "AVAILABLE"]],
+    0.35,
+    ["==", ["get", "status"], "AVAILABLE"],
+    0.45,
+    0.85
   ] as ExpressionSpecification;
 }
 
 export function EarthMap() {
   const { data: session } = useSession();
   const currentUserId = session?.user?.id ?? "";
+  const [showOverviewOverlay, setShowOverviewOverlay] = useState(true);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<Map | null>(null);
   const requestRef = useRef(0);
@@ -133,7 +175,7 @@ export function EarthMap() {
       container: containerRef.current,
       style: darkMapStyle,
       center: [0, 20],
-      zoom: 1.7,
+      zoom: 1.4,
       minZoom: 1.2,
       maxZoom: 19,
       maxPitch: 60,
@@ -144,12 +186,36 @@ export function EarthMap() {
     map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "bottom-right");
     map.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-left");
 
+    function tintBaseMap() {
+      if (!map.isStyleLoaded()) return;
+      if (!map.getLayer("pixel-world-ocean")) {
+        map.addLayer(
+          {
+            id: "pixel-world-ocean",
+            type: "background",
+            paint: {
+              "background-color": "#071525",
+              "background-opacity": 0.72
+            }
+          },
+          map.getStyle().layers?.[0]?.id
+        );
+      }
+    }
+
     async function loadHexes() {
       if (!map.getSource(sourceId)) return;
       const requestId = ++requestRef.current;
+      const zoom = map.getZoom();
+      const source = map.getSource(sourceId) as maplibregl.GeoJSONSource;
+
+      if (zoom < 4) {
+        source.setData({ type: "FeatureCollection", features: [] });
+        return;
+      }
+
       const bounds = map.getBounds();
       const bbox = [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()].join(",");
-      const zoom = map.getZoom();
       const includeVirtual = "&includeVirtual=1";
 
       try {
@@ -158,14 +224,20 @@ export function EarthMap() {
         if (requestId !== requestRef.current) return;
         if (!validateGeoJsonResponse(data)) return;
         console.log("hex features", data.features.length);
+        if (data.features[0]) {
+          console.log("first hex coordinates", data.features[0].geometry.coordinates[0]);
+        }
         if (data.features.length === 0) {
           console.warn("No hex features returned from /api/hexes");
         }
-        const source = map.getSource(sourceId) as maplibregl.GeoJSONSource;
         source.setData(data);
       } catch (error) {
         console.error("/api/hexes load failed", error);
       }
+    }
+
+    function syncOverviewOverlay() {
+      setShowOverviewOverlay(map.getZoom() < 4);
     }
 
     map.on("load", () => {
@@ -186,23 +258,22 @@ export function EarthMap() {
         id: fillLayerId,
         source: sourceId,
         type: "fill",
-        minzoom: 0,
+        minzoom: 4,
         paint: {
           "fill-color": hexFillColorExpression(currentUserId),
-          "fill-opacity": 0.25,
-          "fill-outline-color": "#94a3b8"
+          "fill-opacity": hexFillOpacityExpression()
         }
       });
 
       map.addLayer({
-        id: lineLayerId,
+        id: outlineLayerId,
         source: sourceId,
         type: "line",
-        minzoom: 0,
+        minzoom: 4,
         paint: {
-          "line-color": "#94a3b8",
-          "line-opacity": 0.5,
-          "line-width": 1
+          "line-color": hexLineColorExpression(),
+          "line-opacity": hexLineOpacityExpression(),
+          "line-width": 0.8
         }
       });
 
@@ -210,7 +281,7 @@ export function EarthMap() {
         id: hoverFillLayerId,
         source: hoverSourceId,
         type: "fill",
-        minzoom: 0,
+        minzoom: 4,
         paint: {
           "fill-color": "#ffffff",
           "fill-opacity": 0.18
@@ -221,7 +292,7 @@ export function EarthMap() {
         id: hoverLineLayerId,
         source: hoverSourceId,
         type: "line",
-        minzoom: 0,
+        minzoom: 4,
         paint: {
           "line-color": "#ffffff",
           "line-opacity": 0.95,
@@ -233,7 +304,7 @@ export function EarthMap() {
         id: selectedFillLayerId,
         source: selectedSourceId,
         type: "fill",
-        minzoom: 0,
+        minzoom: 4,
         paint: {
           "fill-color": "#ffffff",
           "fill-opacity": 0.24
@@ -244,7 +315,7 @@ export function EarthMap() {
         id: selectedLineLayerId,
         source: selectedSourceId,
         type: "line",
-        minzoom: 0,
+        minzoom: 4,
         paint: {
           "line-color": "#ffffff",
           "line-opacity": 0.95,
@@ -253,9 +324,15 @@ export function EarthMap() {
       });
 
       void loadHexes();
+      tintBaseMap();
+      syncOverviewOverlay();
     });
 
-    map.on("moveend", loadHexes);
+    map.on("zoom", syncOverviewOverlay);
+    map.on("moveend", () => {
+      syncOverviewOverlay();
+      void loadHexes();
+    });
     map.on("mousemove", fillLayerId, (event) => {
       map.getCanvas().style.cursor = "pointer";
       const feature = event.features?.[0];
@@ -354,12 +431,16 @@ export function EarthMap() {
     const map = mapRef.current;
     if (!map?.getLayer(fillLayerId)) return;
     map.setPaintProperty(fillLayerId, "fill-color", hexFillColorExpression(currentUserId));
-    map.setPaintProperty(lineLayerId, "line-color", hexLineColorExpression(currentUserId));
   }, [currentUserId]);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map?.getSource(sourceId)) return;
+    if (map.getZoom() < 4) {
+      const source = map.getSource(sourceId) as maplibregl.GeoJSONSource;
+      source.setData({ type: "FeatureCollection", features: [] });
+      return;
+    }
     const bounds = map.getBounds();
     const bbox = [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()].join(",");
     const zoom = Math.round(map.getZoom());
@@ -369,6 +450,9 @@ export function EarthMap() {
       .then((data) => {
         if (!validateGeoJsonResponse(data)) return;
         console.log("hex features", data.features.length);
+        if (data.features[0]) {
+          console.log("first hex coordinates", data.features[0].geometry.coordinates[0]);
+        }
         if (data.features.length === 0) {
           console.warn("No hex features returned from /api/hexes");
         }
@@ -380,5 +464,22 @@ export function EarthMap() {
       });
   }, [refreshToken]);
 
-  return <div ref={containerRef} className="h-screen w-full" />;
+  return (
+    <div className="relative h-screen w-full overflow-hidden bg-[#071525]">
+      <div ref={containerRef} className="h-full w-full" />
+      {showOverviewOverlay ? (
+        <div className="pointer-events-none absolute inset-0 z-10">
+          <div className="hex-pattern absolute inset-0" />
+          <div className="world-overview-vignette absolute inset-0" />
+          {mockOverviewHexes.map((marker, index) => (
+            <div
+              key={`${marker.left}-${marker.top}-${index}`}
+              className={`mock-hex-marker mock-hex-${marker.color} mock-hex-${marker.size}`}
+              style={{ left: marker.left, top: marker.top }}
+            />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
 }
