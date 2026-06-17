@@ -90,6 +90,7 @@ model User {
   ownedHexes     Hex[]         @relation("HexOwner")
   territories    Territory[]
   sessions       Session[]
+  accounts       Account[]
   buyerDeals     Transaction[] @relation("TransactionBuyer")
   sellerDeals    Transaction[] @relation("TransactionSeller")
   payments       Payment[]
@@ -98,6 +99,27 @@ model User {
   @@index([role, createdAt])
   @@index([displayName])
   @@map("users")
+}
+
+model Account {
+  id                String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId            String  @map("user_id") @db.Uuid
+  type              String  @db.VarChar(32)
+  provider          String  @db.VarChar(64)
+  providerAccountId String  @map("provider_account_id") @db.VarChar(191)
+  refreshToken      String? @map("refresh_token")
+  accessToken       String? @map("access_token")
+  expiresAt         Int?    @map("expires_at")
+  tokenType         String? @map("token_type")
+  scope             String?
+  idToken           String? @map("id_token")
+  sessionState      String? @map("session_state")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+  @@map("accounts")
 }
 
 model Hex {

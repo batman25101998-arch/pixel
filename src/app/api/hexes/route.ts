@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { cellToBoundary, cellToChildren, cellToLatLng, latLngToCell, polygonToCells } from "h3-js";
+import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
 
 const emptyFeatureCollection = { type: "FeatureCollection", features: [] };
-const FIXED_H3_RESOLUTION = 4;
-const PREVIEW_H3_RESOLUTION = 2;
+const FIXED_H3_RESOLUTION = 5;
 
 type RawFeature = unknown;
 
@@ -15,6 +16,21 @@ type FeatureCollection = {
 type LngLat = [number, number];
 
 type MockHexStatus = "AVAILABLE" | "GREEN_OWNED" | "OWNED" | "FOR_SALE" | "SPECIAL" | "MY_OWNED";
+type PersistedHex = {
+  id: string;
+  h3Index: string;
+  status: string;
+  ownerId: string;
+  owner: {
+    displayName: string;
+    avatarUrl: string | null;
+  };
+  message: string;
+  avatarUrl: string | null;
+  imageUrl: string | null;
+  priceCents: bigint;
+  purchaseDate: Date;
+};
 
 const continentBoxes = [
   { name: "north-america", west: -168, south: 7, east: -52, north: 72 },
@@ -62,10 +78,6 @@ function parseDebug(value: string | null) {
     return "zagreb";
   }
   return null;
-}
-
-function resolutionForRequest(zoom: number) {
-  return zoom < 3 ? PREVIEW_H3_RESOLUTION : FIXED_H3_RESOLUTION;
 }
 
 function isApproximateLand(latitude: number, longitude: number) {
@@ -203,7 +215,33 @@ function validateFeatures(features: unknown[]): unknown[] {
   return valid;
 }
 
-function cellToPolygonFeature(cell: string, resolution: number) {
+function approximateBBoxCellCount(west: number, south: number, east: number, north: number) {
+  const width = Math.abs(east - west);
+  const height = Math.abs(north - south);
+  return width * height * 3.8 ** FIXED_H3_RESOLUTION;
+}
+
+function sampledCellsForBBox(west: number, south: number, east: number, north: number, take: number) {
+  const cells = new Set<string>();
+  const target = Math.min(take, 10000);
+  const columns = Math.ceil(Math.sqrt(target * 2.15));
+  const rows = Math.ceil(target / columns);
+  const lngStep = (east - west) / Math.max(columns - 1, 1);
+  const latStep = (north - south) / Math.max(rows - 1, 1);
+
+  for (let row = 0; row < rows; row += 1) {
+    const lat = Math.max(-85, Math.min(85, south + latStep * row));
+    for (let column = 0; column < columns; column += 1) {
+      const lng = Math.max(-180, Math.min(180, west + lngStep * column));
+      cells.add(latLngToCell(lat, lng, FIXED_H3_RESOLUTION));
+      if (cells.size >= target) return Array.from(cells);
+    }
+  }
+
+  return Array.from(cells);
+}
+
+function cellToPolygonFeature(cell: string, persistedHex?: PersistedHex, currentUserId?: string) {
   const boundary = cellToBoundary(cell);
   const ring = boundary.map(([lat, lng]) => [lng, lat] as LngLat);
   ring.push(ring[0]);
@@ -214,49 +252,62 @@ function cellToPolygonFeature(cell: string, resolution: number) {
 
   const [lat, lng] = cellToLatLng(cell);
   const isLand = isApproximateLand(lat, lng);
-  const status = mockStatusForCell(cell, isLand);
-  const owner = mockOwnerForStatus(status, cell);
+  const mockStatus = mockStatusForCell(cell, isLand);
+  const status: MockHexStatus | string = persistedHex
+    ? persistedHex.ownerId === currentUserId
+      ? "MY_OWNED"
+      : persistedHex.status
+    : mockStatus;
+  const owner = persistedHex
+    ? {
+        ownerId: persistedHex.ownerId,
+        ownerName: persistedHex.owner.displayName
+      }
+    : mockOwnerForStatus(mockStatus, cell);
 
   return {
     type: "Feature",
-    id: cell,
+    id: persistedHex?.id ?? cell,
     geometry: {
       type: "Polygon",
       coordinates: [ring],
     },
     properties: {
-      id: cell,
+      id: persistedHex?.id ?? cell,
       h3Index: cell,
-      resolution,
-      isPreview: resolution === PREVIEW_H3_RESOLUTION,
+      resolution: FIXED_H3_RESOLUTION,
       status,
       isLand,
       isOcean: !isLand,
       ownerId: owner.ownerId,
       ownerName: owner.ownerName,
+      ownerImage: persistedHex?.avatarUrl ?? persistedHex?.owner.avatarUrl ?? null,
       price: 1,
-      priceCents: 100,
+      priceCents: persistedHex ? Number(persistedHex.priceCents) : 100,
       latitude: lat,
       longitude: lng,
+      message: persistedHex?.message ?? "",
+      imageUrl: persistedHex?.imageUrl ?? null,
+      purchaseDate: persistedHex?.purchaseDate.toISOString() ?? null,
     },
   };
 }
 
 export async function GET(request: Request) {
   try {
+    const session = await auth();
     const url = new URL(request.url);
     const bbox = parseBBox(url.searchParams.get("bbox"));
     const zoom = parseZoom(url.searchParams.get("zoom"));
     const take = parseTake(url.searchParams.get("take"));
     const includeVirtual = parseIncludeVirtual(url.searchParams.get("includeVirtual"));
     const debug = parseDebug(url.searchParams.get("debug"));
-    const resolution = resolutionForRequest(zoom);
 
-    console.log("/api/hexes bbox", bbox, "zoom", zoom, "resolution", resolution, "includeVirtual", includeVirtual, "take", take, "debug", debug);
+    console.log("/api/hexes bbox", bbox, "zoom", zoom, "resolution", FIXED_H3_RESOLUTION, "includeVirtual", includeVirtual, "take", take, "debug", debug);
 
     if (debug === "zagreb") {
-      const zagrebCell = latLngToCell(45.815, 15.981, resolution);
-      const feature = cellToPolygonFeature(zagrebCell, resolution);
+      const zagrebCell = latLngToCell(45.815, 15.981, FIXED_H3_RESOLUTION);
+      const feature = cellToPolygonFeature(zagrebCell, undefined, session?.user?.id);
       console.log("/api/hexes debug first feature coordinates", feature.geometry.coordinates[0]);
       return NextResponse.json({ type: "FeatureCollection", features: [feature] });
     }
@@ -284,14 +335,17 @@ export async function GET(request: Request) {
       ]
     ];
 
-    let cells = polygonToCells(polygon, resolution);
+    const estimatedCellCount = approximateBBoxCellCount(west, south, east, north);
+    let cells = estimatedCellCount > take * 3
+      ? sampledCellsForBBox(west, south, east, north, take)
+      : polygonToCells(polygon, FIXED_H3_RESOLUTION);
     console.log("/api/hexes generated cell count", cells.length);
 
     if (cells.length === 0) {
       const centerLat = (south + north) / 2;
       const centerLng = (west + east) / 2;
-      const parent = latLngToCell(centerLat, centerLng, Math.max(0, resolution - 1));
-      cells = cellToChildren(parent, resolution);
+      const parent = latLngToCell(centerLat, centerLng, Math.max(0, FIXED_H3_RESOLUTION - 1));
+      cells = cellToChildren(parent, FIXED_H3_RESOLUTION);
       console.log("/api/hexes fallback child cell count", cells.length);
     }
 
@@ -299,12 +353,32 @@ export async function GET(request: Request) {
     if (outputCells.length === 0) {
       const centerLat = (south + north) / 2;
       const centerLng = (west + east) / 2;
-      const fallbackParent = latLngToCell(centerLat, centerLng, Math.max(0, resolution - 2));
-      outputCells = cellToChildren(fallbackParent, resolution);
+      const fallbackParent = latLngToCell(centerLat, centerLng, Math.max(0, FIXED_H3_RESOLUTION - 2));
+      outputCells = cellToChildren(fallbackParent, FIXED_H3_RESOLUTION);
       console.log("/api/hexes center fallback cell count", outputCells.length);
     }
 
-    const features = outputCells.slice(0, take).map((cell) => cellToPolygonFeature(cell, resolution));
+    const visibleCells = outputCells.slice(0, take);
+    let persistedHexes: PersistedHex[] = [];
+    try {
+      persistedHexes = (await prisma.hex.findMany({
+        where: {
+          h3Index: { in: visibleCells }
+        },
+        include: {
+          owner: {
+            select: {
+              displayName: true,
+              avatarUrl: true
+            }
+          }
+        }
+      })) as PersistedHex[];
+    } catch (error) {
+      console.error("/api/hexes persisted lookup failed:", error);
+    }
+    const persistedByCell = new Map(persistedHexes.map((hex) => [hex.h3Index, hex]));
+    const features = visibleCells.map((cell) => cellToPolygonFeature(cell, persistedByCell.get(cell), session?.user?.id));
 
     const validFeatures = validateFeatures(features);
     if (validFeatures.length > 0 && isValidFeature(validFeatures[0])) {

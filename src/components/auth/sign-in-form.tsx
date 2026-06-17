@@ -14,6 +14,12 @@ export function SignInForm() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  async function signInWithApple() {
+    setBusy(true);
+    setError(null);
+    await signIn("apple", { callbackUrl: "/dashboard" });
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
@@ -53,6 +59,23 @@ export function SignInForm() {
         <CardTitle>{mode === "signin" ? "Sign in" : "Create account"}</CardTitle>
       </CardHeader>
       <CardContent>
+        <div className="grid gap-2">
+          <Button className="w-full" variant="outline" onClick={() => signIn("google", { callbackUrl: "/dashboard" })} disabled={busy}>
+            <span className="mr-2 flex h-5 w-5 items-center justify-center rounded-full border border-border text-xs font-bold">G</span>
+            Continue with Google
+          </Button>
+          <Button className="w-full" variant="outline" onClick={signInWithApple} disabled={busy}>
+            <span className="mr-2 flex h-5 w-5 items-center justify-center rounded-full border border-border text-xs font-bold">A</span>
+            Continue with Apple
+          </Button>
+        </div>
+
+        <div className="my-5 flex items-center gap-3">
+          <div className="h-px flex-1 bg-border" />
+          <span className="text-xs uppercase tracking-wide text-muted-foreground">or</span>
+          <div className="h-px flex-1 bg-border" />
+        </div>
+
         <form className="space-y-4" onSubmit={submit}>
           {mode === "register" ? (
             <div className="space-y-1.5">

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Earth, LayoutDashboard, Shield, Store, Trophy } from "lucide-react";
+import { Earth, LayoutDashboard, Shield, Store, Trophy, UserCircle } from "lucide-react";
 import { auth } from "@/auth";
 import { Providers } from "@/components/providers";
 import { Button } from "@/components/ui/button";
@@ -18,8 +18,8 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
     <html lang="en" className="dark">
       <body>
         <Providers>
-          <header className="fixed inset-x-0 top-0 z-40 border-b border-border/70 bg-background/88 backdrop-blur">
-            <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4">
+          <header className="fixed inset-x-0 top-0 z-40 h-[86px] border-b border-border/70 bg-background/88 backdrop-blur">
+            <div className="mx-auto flex h-[86px] max-w-7xl items-center justify-between px-4">
               <Link href="/" className="flex items-center gap-2 font-semibold">
                 <Earth className="h-5 w-5 text-primary" />
                 <span>Own a Pixel of Earth</span>
@@ -27,6 +27,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
               <nav className="hidden items-center gap-1 md:flex">
                 <Button asChild variant="ghost" size="sm"><Link href="/marketplace"><Store className="h-4 w-4" /> Market</Link></Button>
                 <Button asChild variant="ghost" size="sm"><Link href="/leaderboard"><Trophy className="h-4 w-4" /> Leaders</Link></Button>
+                <Button asChild variant="ghost" size="sm"><Link href="/profile"><UserCircle className="h-4 w-4" /> Profile</Link></Button>
                 <Button asChild variant="ghost" size="sm"><Link href="/dashboard"><LayoutDashboard className="h-4 w-4" /> Dashboard</Link></Button>
                 {session?.user.role === "ADMIN" ? (
                   <Button asChild variant="ghost" size="sm"><Link href="/admin"><Shield className="h-4 w-4" /> Admin</Link></Button>
@@ -41,7 +42,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
               </div>
             </div>
           </header>
-          <main className="min-h-screen pt-14">{children}</main>
+          <main className="min-h-screen pt-[86px]">{children}</main>
         </Providers>
       </body>
     </html>

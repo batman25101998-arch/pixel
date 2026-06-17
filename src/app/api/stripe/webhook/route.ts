@@ -28,6 +28,9 @@ export async function POST(request: Request) {
 
     const metadata = payment.metadata as {
       h3Index?: string;
+      hexId?: string;
+      marketplaceId?: string;
+      sellerId?: string;
       message?: string;
       avatarUrl?: string;
       imageUrl?: string;
@@ -39,8 +42,27 @@ export async function POST(request: Request) {
     const polygon = geoJsonPolygonSql(metadata.h3Index);
 
     await prisma.$transaction(async (tx) => {
-      const current = await tx.hex.findUnique({ where: { h3Index: metadata.h3Index! } });
+      const current = await tx.hex.findUnique({
+        where: { h3Index: metadata.h3Index! },
+        include: {
+          listings: {
+            where: { status: "ACTIVE" },
+            orderBy: { createdAt: "desc" },
+            take: 1
+          }
+        }
+      });
       if (current && current.status !== "FOR_SALE") {
+        await tx.payment.update({ where: { id: payment.id }, data: { status: "CANCELED", rawEvent: event as object } });
+        return;
+      }
+      if (current && current.ownerId === payment.userId) {
+        await tx.payment.update({ where: { id: payment.id }, data: { status: "CANCELED", rawEvent: event as object } });
+        return;
+      }
+
+      const activeListing = current?.listings[0] ?? null;
+      if (current && (!activeListing || activeListing.id !== metadata.marketplaceId || Number(activeListing.priceCents) !== Number(payment.amountCents))) {
         await tx.payment.update({ where: { id: payment.id }, data: { status: "CANCELED", rawEvent: event as object } });
         return;
       }
@@ -55,7 +77,7 @@ export async function POST(request: Request) {
               avatarUrl: metadata.avatarUrl ?? current.avatarUrl,
               imageUrl: metadata.imageUrl ?? current.imageUrl,
               status: "OWNED",
-              priceCents: 100
+              priceCents: payment.amountCents
             }
           })
         : await tx.hex.create({
@@ -73,6 +95,13 @@ export async function POST(request: Request) {
             }
           });
 
+      if (activeListing) {
+        await tx.marketplace.update({
+          where: { id: activeListing.id },
+          data: { status: "SOLD" }
+        });
+      }
+
       await tx.$executeRawUnsafe(
         `UPDATE hexes SET geom = ST_SetSRID(ST_GeomFromGeoJSON($1), 4326) WHERE id = $2::uuid`,
         polygon,
@@ -88,17 +117,25 @@ export async function POST(request: Request) {
         }
       });
 
+      const platformFeeCents = current ? Math.round(Number(payment.amountCents) * 0.05) : 0;
       await tx.transaction.create({
         data: {
           hexId: hex.id,
           buyerId: payment.userId,
           sellerId: current?.ownerId,
+          marketplaceId: activeListing?.id,
           paymentId: payment.id,
           type: current ? "RESALE_PURCHASE" : "PRIMARY_PURCHASE",
           status: "COMPLETED",
           amountCents: payment.amountCents,
+          platformFeeCents,
           currency: payment.currency,
-          metadata: { h3Index: metadata.h3Index },
+          metadata: {
+            h3Index: metadata.h3Index,
+            marketplaceId: activeListing?.id,
+            sellerId: current?.ownerId,
+            platformFeeRate: current ? 0.05 : 0
+          },
           completedAt: new Date()
         }
       });

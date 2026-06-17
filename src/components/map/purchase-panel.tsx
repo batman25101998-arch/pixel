@@ -1,35 +1,166 @@
 "use client";
 
-import { useState } from "react";
-import { ShoppingCart, Tag } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Award, CheckCircle2, Loader2, MapPin, ShoppingCart, Tag, X } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { money } from "@/lib/utils";
 import { useMapStore } from "@/stores/map-store";
 
+type Certificate = {
+  id: string;
+  h3Index: string;
+  latitude: number;
+  longitude: number;
+  ownerName: string;
+  ownerImage?: string | null;
+  message?: string;
+  imageUrl?: string | null;
+  priceCents: number;
+  purchaseDate: string;
+};
+
+type CheckoutStatusResponse = {
+  status: "REQUIRES_PAYMENT" | "PROCESSING" | "SUCCEEDED" | "FAILED" | "REFUNDED" | "CANCELED" | "PENDING";
+  certificate: Certificate | null;
+};
+
+function coordinateLabel(lat: number, lng: number) {
+  const ns = lat >= 0 ? "N" : "S";
+  const ew = lng >= 0 ? "E" : "W";
+  return `${Math.abs(lat).toFixed(5)}° ${ns}, ${Math.abs(lng).toFixed(5)}° ${ew}`;
+}
+
+function CertificateCard({ certificate }: { certificate: Certificate }) {
+  return (
+    <div className="rounded-lg border border-amber-300/45 bg-gradient-to-br from-amber-50 to-stone-100 p-4 text-stone-900 shadow-inner">
+      <div className="flex items-start justify-between gap-3 border-b border-stone-300 pb-3">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-stone-500">Certificate of Ownership</p>
+          <h3 className="mt-1 text-xl font-bold">{certificate.ownerName}</h3>
+        </div>
+        <Award className="h-9 w-9 text-amber-600" />
+      </div>
+      <div className="mt-4 space-y-2 text-sm">
+        <p>
+          owns Earth hex <span className="font-semibold">{certificate.h3Index}</span>
+        </p>
+        <p>{coordinateLabel(certificate.latitude, certificate.longitude)}</p>
+        <p>Purchased {new Date(certificate.purchaseDate).toLocaleDateString()}</p>
+        <p>Certificate #{certificate.id.slice(0, 8).toUpperCase()}</p>
+      </div>
+      {certificate.message ? <p className="mt-4 rounded-md bg-white/60 p-3 text-sm italic text-stone-700">"{certificate.message}"</p> : null}
+    </div>
+  );
+}
+
 export function PurchasePanel() {
   const selectedHex = useMapStore((state) => state.selectedHex);
+  const setSelectedHex = useMapStore((state) => state.setSelectedHex);
   const refresh = useMapStore((state) => state.refresh);
   const [message, setMessage] = useState("");
   const [avatarUrl, setAvatarUrl] = useState("");
   const [imageUrl, setImageUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [certificate, setCertificate] = useState<Certificate | null>(null);
+  const [checkoutStatus, setCheckoutStatus] = useState<string | null>(null);
 
-  if (!selectedHex) {
-    return (
-      <aside className="absolute bottom-4 right-4 z-20 w-[min(380px,calc(100vw-2rem))] rounded-lg border border-border bg-card/95 p-4 shadow-xl backdrop-blur">
-        <p className="text-sm text-muted-foreground">Click any place on Earth to inspect or buy the hex beneath it.</p>
-      </aside>
-    );
-  }
-
-  const purchased = selectedHex.purchased;
+  const purchased = selectedHex?.purchased;
   const status = purchased?.status ?? "AVAILABLE";
   const price = purchased?.priceCents ?? 100;
+  const coordinates = selectedHex ? coordinateLabel(selectedHex.lat, selectedHex.lng) : "";
+
+  const previewStyle = useMemo(() => {
+    if (!selectedHex) return {};
+    return {
+      background:
+        status === "AVAILABLE"
+          ? "linear-gradient(135deg, rgba(15,23,42,0.92), rgba(30,41,59,0.88))"
+          : status === "FOR_SALE"
+            ? "linear-gradient(135deg, rgba(251,191,36,0.92), rgba(180,83,9,0.85))"
+            : "linear-gradient(135deg, rgba(37,99,235,0.92), rgba(88,28,135,0.85))"
+    };
+  }, [selectedHex, status]);
+
+  useEffect(() => {
+    if (!selectedHex) return;
+    setError(null);
+    setMessage("");
+    setAvatarUrl("");
+    setImageUrl("");
+  }, [selectedHex?.h3Index]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const checkout = params.get("checkout");
+    const sessionId = params.get("session_id");
+    if (checkout !== "success" || !sessionId) return;
+    const checkoutSessionId = sessionId;
+
+    let cancelled = false;
+    let attempts = 0;
+
+    async function pollCheckout() {
+      attempts += 1;
+      setCheckoutStatus("Confirming payment...");
+      try {
+        const response = await fetch(`/api/checkout/status?sessionId=${encodeURIComponent(checkoutSessionId)}`);
+        const data = (await response.json()) as CheckoutStatusResponse;
+
+        if (cancelled) return;
+        if (data.status === "SUCCEEDED" && data.certificate) {
+          setCertificate(data.certificate);
+          setSelectedHex({
+            h3Index: data.certificate.h3Index,
+            lng: data.certificate.longitude,
+            lat: data.certificate.latitude,
+            purchased: {
+              id: data.certificate.id,
+              ownerName: data.certificate.ownerName,
+              ownerImage: data.certificate.ownerImage,
+              message: data.certificate.message,
+              imageUrl: data.certificate.imageUrl,
+              status: "MY_OWNED",
+              priceCents: data.certificate.priceCents
+            }
+          });
+          refresh();
+          setCheckoutStatus("Payment complete");
+          window.history.replaceState(null, "", window.location.pathname);
+          return;
+        }
+
+        if (["FAILED", "CANCELED", "REFUNDED"].includes(data.status)) {
+          setCheckoutStatus(null);
+          setError("Payment was not completed.");
+          window.history.replaceState(null, "", window.location.pathname);
+          return;
+        }
+
+        if (attempts < 12) {
+          window.setTimeout(pollCheckout, 1500);
+        } else {
+          setCheckoutStatus("Payment is still processing. The map will update when Stripe confirms it.");
+        }
+      } catch {
+        if (!cancelled) setError("Could not verify the checkout session.");
+      }
+    }
+
+    void pollCheckout();
+    return () => {
+      cancelled = true;
+    };
+  }, [refresh, setSelectedHex]);
+
+  if (!selectedHex && !certificate && !checkoutStatus) {
+    return null;
+  }
 
   async function checkout() {
     if (!selectedHex) return;
@@ -48,65 +179,118 @@ export function PurchasePanel() {
     const data = await response.json();
     setBusy(false);
     if (!response.ok) {
-      setError(data.error || "Checkout could not be started.");
+      setError(typeof data.error === "string" ? data.error : "Checkout could not be started.");
       return;
     }
-    refresh();
     window.location.href = data.checkoutUrl;
   }
 
   return (
-    <aside className="absolute bottom-4 right-4 z-20 max-h-[calc(100vh-6.5rem)] w-[min(420px,calc(100vw-2rem))] overflow-auto rounded-lg border border-border bg-card/95 p-4 shadow-xl backdrop-blur">
-      <div className="mb-3 flex items-start justify-between gap-3">
-        <div>
-          <p className="text-xs uppercase tracking-wide text-muted-foreground">Selected hex</p>
-          <h2 className="break-all text-lg font-semibold">{selectedHex.h3Index}</h2>
+    <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm">
+      <div className="max-h-[calc(100vh-7rem)] w-[min(520px,calc(100vw-2rem))] overflow-auto rounded-lg border border-cyan-200/20 bg-card/95 p-5 shadow-2xl shadow-black/50">
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">Selected hex</p>
+            <h2 className="break-all text-lg font-semibold">{selectedHex?.h3Index ?? certificate?.h3Index}</h2>
+          </div>
+          <button
+            aria-label="Close purchase modal"
+            className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-background/70 text-muted-foreground transition hover:bg-accent hover:text-accent-foreground"
+            onClick={() => {
+              setSelectedHex(null);
+              setCertificate(null);
+              setCheckoutStatus(null);
+              setError(null);
+            }}
+            type="button"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
-        <span className="rounded-md bg-secondary px-2 py-1 text-sm font-semibold text-secondary-foreground">{money(price)}</span>
+
+        {checkoutStatus && !certificate ? (
+          <div className="mb-4 flex items-center gap-3 rounded-md border border-cyan-200/20 bg-background/70 p-3 text-sm">
+            <Loader2 className="h-4 w-4 animate-spin text-primary" />
+            <span>{checkoutStatus}</span>
+          </div>
+        ) : null}
+
+        {certificate ? (
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 rounded-md border border-emerald-400/25 bg-emerald-500/10 p-3 text-sm text-emerald-200">
+              <CheckCircle2 className="h-4 w-4" />
+              Payment confirmed. Your hex is now owned and saved.
+            </div>
+            <CertificateCard certificate={certificate} />
+          </div>
+        ) : selectedHex ? (
+          <div className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-[150px_1fr]">
+              <div className="flex aspect-square items-center justify-center rounded-lg border border-cyan-200/20 bg-background/60">
+                <div className="mock-legend-hex h-24 w-24 border border-white/25 shadow-lg shadow-cyan-950/40" style={previewStyle} />
+              </div>
+              <div className="space-y-3 rounded-lg border border-border bg-background/55 p-3">
+                <div>
+                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Coordinates</p>
+                  <p className="mt-1 flex items-center gap-2 font-medium">
+                    <MapPin className="h-4 w-4 text-primary" />
+                    {coordinates}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Price</p>
+                  <p className="mt-1 text-2xl font-bold">{money(price)}</p>
+                </div>
+              </div>
+            </div>
+
+            {purchased ? (
+              <div className="rounded-md border border-border bg-background/60 p-3">
+                <div className="flex items-center gap-3">
+                  <Avatar>
+                    <AvatarImage src={purchased.ownerImage ?? undefined} />
+                    <AvatarFallback>{purchased.ownerName.slice(0, 2).toUpperCase()}</AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <p className="font-medium">{purchased.ownerName}</p>
+                    <p className="text-xs text-muted-foreground">{status === "FOR_SALE" ? "Listed for resale" : "Owned"}</p>
+                  </div>
+                </div>
+                {purchased.message ? <p className="mt-3 text-sm text-muted-foreground">{purchased.message}</p> : null}
+                {purchased.imageUrl ? <img src={purchased.imageUrl} alt="" className="mt-3 aspect-video w-full rounded-md object-cover" /> : null}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="message">Message</Label>
+                  <Textarea id="message" maxLength={240} value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Leave a marker for future explorers." />
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="avatar">Avatar URL</Label>
+                    <Input id="avatar" value={avatarUrl} onChange={(event) => setAvatarUrl(event.target.value)} placeholder="https://..." />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="image">Image URL</Label>
+                    <Input id="image" value={imageUrl} onChange={(event) => setImageUrl(event.target.value)} placeholder="https://..." />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {error ? <p className="text-sm text-destructive">{error}</p> : null}
+
+            {purchased && status !== "FOR_SALE" && status !== "AVAILABLE" ? (
+              <p className="text-sm text-muted-foreground">This hex is already claimed. Watch the marketplace for resale listings.</p>
+            ) : (
+              <Button className="w-full" onClick={checkout} disabled={busy}>
+                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : purchased ? <Tag className="h-4 w-4" /> : <ShoppingCart className="h-4 w-4" />}
+                {busy ? "Starting checkout..." : purchased ? "Buy resale hex" : "Buy hex for $1"}
+              </Button>
+            )}
+          </div>
+        ) : null}
       </div>
-
-      {purchased ? (
-        <div className="mb-4 rounded-md border border-border bg-background/60 p-3">
-          <div className="flex items-center gap-3">
-            <Avatar>
-              <AvatarImage src={purchased.ownerImage ?? undefined} />
-              <AvatarFallback>{purchased.ownerName.slice(0, 2).toUpperCase()}</AvatarFallback>
-            </Avatar>
-            <div>
-              <p className="font-medium">{purchased.ownerName}</p>
-              <p className="text-xs text-muted-foreground">{status === "FOR_SALE" ? "Listed for resale" : status === "AVAILABLE" ? "Available" : "Owned"}</p>
-            </div>
-          </div>
-          {purchased.message ? <p className="mt-3 text-sm text-muted-foreground">{purchased.message}</p> : null}
-          {purchased.imageUrl ? <img src={purchased.imageUrl} alt="" className="mt-3 aspect-video w-full rounded-md object-cover" /> : null}
-        </div>
-      ) : null}
-
-      {purchased && status !== "FOR_SALE" && status !== "AVAILABLE" ? (
-        <p className="text-sm text-muted-foreground">This hex is already claimed. Watch the marketplace for resale listings.</p>
-      ) : (
-        <div className="space-y-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="message">Message</Label>
-            <Textarea id="message" maxLength={240} value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Leave a marker for future explorers." />
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="avatar">Avatar URL</Label>
-              <Input id="avatar" value={avatarUrl} onChange={(event) => setAvatarUrl(event.target.value)} placeholder="https://..." />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="image">Image URL</Label>
-              <Input id="image" value={imageUrl} onChange={(event) => setImageUrl(event.target.value)} placeholder="https://..." />
-            </div>
-          </div>
-          {error ? <p className="text-sm text-destructive">{typeof error === "string" ? error : "Something went wrong."}</p> : null}
-          <Button className="w-full" onClick={checkout} disabled={busy}>
-            {purchased ? <Tag className="h-4 w-4" /> : <ShoppingCart className="h-4 w-4" />}
-            {busy ? "Starting checkout..." : purchased ? "Buy resale hex" : "Buy this hex for $1"}
-          </Button>
-        </div>
-      )}
-    </aside>
+    </div>
   );
 }

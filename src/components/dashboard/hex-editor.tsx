@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { money } from "@/lib/utils";
 
 type Hex = {
   id: string;
@@ -19,6 +20,9 @@ type Hex = {
 
 export function HexEditor({ hex }: { hex: Hex }) {
   const [saved, setSaved] = useState(false);
+  const [salePrice, setSalePrice] = useState(Number(hex.priceCents) / 100);
+  const salePriceCents = Math.max(100, Math.round((Number.isFinite(salePrice) ? salePrice : 0) * 100));
+  const platformFeeCents = Math.round(salePriceCents * 0.05);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -66,7 +70,10 @@ export function HexEditor({ hex }: { hex: Hex }) {
           </label>
           <div className="space-y-1.5">
             <Label>Price</Label>
-            <Input name="salePriceDollars" type="number" min={1} step={1} defaultValue={Number(hex.priceCents) / 100} />
+            <Input name="salePriceDollars" type="number" min={1} step={1} value={salePrice} onChange={(event) => setSalePrice(Number(event.target.value))} />
+            <p className="text-xs text-muted-foreground">
+              Platform fee: {money(platformFeeCents)}. Estimated payout: {money(salePriceCents - platformFeeCents)}
+            </p>
           </div>
           <Button><Save className="h-4 w-4" />Save</Button>
           <Button type="button" variant="outline"><Tag className="h-4 w-4" />Territory-ready</Button>
