@@ -24,9 +24,11 @@ const serverSchema = z.object({
   APPLE_CLIENT_SECRET: z.string().optional()
 });
 
+export const isDemoMode = process.env.DEMO_MODE === "true";
+
 export const env = serverSchema.parse({
-  DATABASE_URL: process.env.DATABASE_URL,
-  AUTH_SECRET: process.env.AUTH_SECRET,
+  DATABASE_URL: process.env.DATABASE_URL ?? (isDemoMode ? "postgresql://demo:demo@localhost:5432/demo" : undefined),
+  AUTH_SECRET: process.env.AUTH_SECRET ?? (isDemoMode ? "demo-mode-secret-at-least-32-characters" : undefined),
   AUTH_URL: process.env.AUTH_URL,
   NEXTAUTH_URL: process.env.NEXTAUTH_URL ?? process.env.AUTH_URL ?? "http://localhost:3000",
   NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",

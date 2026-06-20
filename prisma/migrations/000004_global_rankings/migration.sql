@@ -1,0 +1,29 @@
+ALTER TABLE "hexes" ADD COLUMN "country_code" CHAR(2);
+
+UPDATE "hexes"
+SET "country_code" = CASE
+  WHEN longitude BETWEEN -125 AND -66 AND latitude BETWEEN 24 AND 49 THEN 'US'
+  WHEN longitude BETWEEN -141 AND -52 AND latitude BETWEEN 49 AND 70 THEN 'CA'
+  WHEN longitude BETWEEN -118 AND -86 AND latitude BETWEEN 14 AND 33 THEN 'MX'
+  WHEN longitude BETWEEN -74 AND -34 AND latitude BETWEEN -34 AND 6 THEN 'BR'
+  WHEN longitude BETWEEN -74 AND -53 AND latitude BETWEEN -56 AND -21 THEN 'AR'
+  WHEN longitude BETWEEN -8 AND 2 AND latitude BETWEEN 49 AND 59 THEN 'GB'
+  WHEN longitude BETWEEN -5 AND 8 AND latitude BETWEEN 42 AND 51 THEN 'FR'
+  WHEN longitude BETWEEN -10 AND 4 AND latitude BETWEEN 36 AND 44 THEN 'ES'
+  WHEN longitude BETWEEN 5 AND 16 AND latitude BETWEEN 47 AND 55 THEN 'DE'
+  WHEN longitude BETWEEN 6 AND 19 AND latitude BETWEEN 36 AND 47 THEN 'IT'
+  WHEN longitude BETWEEN 14 AND 24 AND latitude BETWEEN 49 AND 55 THEN 'PL'
+  WHEN longitude BETWEEN 22 AND 41 AND latitude BETWEEN 44 AND 53 THEN 'UA'
+  WHEN longitude BETWEEN 16 AND 33 AND latitude BETWEEN -35 AND -22 THEN 'ZA'
+  WHEN longitude BETWEEN 25 AND 36 AND latitude BETWEEN 22 AND 32 THEN 'EG'
+  WHEN longitude BETWEEN 2 AND 15 AND latitude BETWEEN 4 AND 14 THEN 'NG'
+  WHEN longitude BETWEEN 68 AND 98 AND latitude BETWEEN 7 AND 36 THEN 'IN'
+  WHEN longitude BETWEEN 73 AND 135 AND latitude BETWEEN 18 AND 54 THEN 'CN'
+  WHEN longitude BETWEEN 129 AND 146 AND latitude BETWEEN 31 AND 46 THEN 'JP'
+  WHEN longitude BETWEEN 95 AND 141 AND latitude BETWEEN -11 AND 6 THEN 'ID'
+  WHEN longitude BETWEEN 112 AND 154 AND latitude BETWEEN -44 AND -10 THEN 'AU'
+  WHEN longitude BETWEEN 30 AND 180 AND latitude BETWEEN 41 AND 82 THEN 'RU'
+  ELSE NULL
+END;
+
+CREATE INDEX "hexes_owner_id_country_code_idx" ON "hexes"("owner_id", "country_code");

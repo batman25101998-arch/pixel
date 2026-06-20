@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { cellForLngLat, toFeature } from "@/lib/hex";
+import { isDemoMode } from "@/lib/env";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -10,14 +11,16 @@ export async function GET(request: Request) {
 
   if (Number.isFinite(lng) && Number.isFinite(lat)) {
     const h3Index = cellForLngLat(lng, lat);
+    if (isDemoMode) return NextResponse.json({ h3Index, results: [] });
     const hex = await prisma.hex.findUnique({
       where: { h3Index },
-      include: { owner: { select: { id: true, displayName: true, avatarUrl: true } } }
+      include: { owner: { select: { id: true, displayName: true, avatarUrl: true, founderNumber: true, kingdomUnlockedAt: true } } }
     });
     return NextResponse.json({ h3Index, results: hex ? [toFeature(hex)] : [] });
   }
 
   if (!query) return NextResponse.json({ results: [] });
+  if (isDemoMode) return NextResponse.json({ results: [] });
 
   const hexes = await prisma.hex.findMany({
     where: {
@@ -28,7 +31,7 @@ export async function GET(request: Request) {
       ]
     },
     take: 25,
-    include: { owner: { select: { id: true, displayName: true, avatarUrl: true } } }
+    include: { owner: { select: { id: true, displayName: true, avatarUrl: true, founderNumber: true, kingdomUnlockedAt: true } } }
   });
 
   return NextResponse.json({ results: hexes.map(toFeature) });

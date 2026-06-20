@@ -11,9 +11,11 @@ import { money } from "@/lib/utils";
 type Hex = {
   id: string;
   h3Index: string;
+  title: string;
   message: string;
   avatarUrl: string | null;
   imageUrl: string | null;
+  externalLink: string | null;
   status: "OWNED" | "FOR_SALE" | "LOCKED" | "BANNED" | "AVAILABLE";
   priceCents: bigint | number;
 };
@@ -32,9 +34,11 @@ export function HexEditor({ hex }: { hex: Hex }) {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        title: String(form.get("title")),
         message: String(form.get("message")),
         avatarUrl: String(form.get("avatarUrl") || "") || null,
         imageUrl: String(form.get("imageUrl") || "") || null,
+        externalLink: String(form.get("externalLink") || "") || null,
         status: form.get("forSale") ? "FOR_SALE" : "OWNED",
         priceCents: price
       })
@@ -49,10 +53,13 @@ export function HexEditor({ hex }: { hex: Hex }) {
         <span className="text-xs text-muted-foreground">{hex.status === "FOR_SALE" ? "For sale" : "Owned"}</span>
       </div>
       <div className="space-y-3">
+        <div className="space-y-1.5"><Label>Collectible title</Label><Input name="title" defaultValue={hex.title} maxLength={80} /></div>
         <div className="space-y-1.5">
           <Label>Message</Label>
           <Textarea name="message" defaultValue={hex.message} maxLength={240} />
         </div>
+        <div className="space-y-1.5"><Label>External link</Label><Input name="externalLink" type="url" defaultValue={hex.externalLink ?? ""} /></div>
+        {hex.imageUrl ? <img src={hex.imageUrl} alt="Collectible preview" className="aspect-video w-full max-w-md rounded-md object-cover" /> : null}
         <div className="grid gap-3 md:grid-cols-2">
           <div className="space-y-1.5">
             <Label>Avatar URL</Label>

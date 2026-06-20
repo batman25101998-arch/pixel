@@ -1,14 +1,20 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import type { MutableRefObject } from "react";
 import maplibregl, { Map, type ExpressionSpecification, type StyleSpecification } from "maplibre-gl";
 import { useSession } from "next-auth/react";
-import { useMapStore } from "@/stores/map-store";
+import { DEMO_USER, isClientDemoMode } from "@/lib/demo";
+import { getDemoOwnedHexes, getDemoTerritories } from "@/lib/demo-storage";
+import { useMapStore, type SelectedHex } from "@/stores/map-store";
 
 const sourceId = "earth-hexes";
 const selectedSourceId = "earth-hex-selected";
+const territorySourceId = "earth-territories";
 const fillLayerId = "earth-hexes-fill";
 const outlineLayerId = "earth-hexes-outline";
+const territoryFillLayerId = "earth-territories-fill";
+const territoryLineLayerId = "earth-territories-line";
 const selectedFillLayerId = "earth-hex-selected-fill";
 const selectedLineLayerId = "earth-hex-selected-line";
 
@@ -107,11 +113,53 @@ function validateGeoJsonResponse(value: unknown): value is GeoJSON.FeatureCollec
   return true;
 }
 
+function applyDemoOwnership(data: GeoJSON.FeatureCollection<GeoJSON.Polygon>) {
+  if (!isClientDemoMode) return data;
+  const ownedByIndex = new globalThis.Map(getDemoOwnedHexes().map((hex) => [hex.h3Index, hex]));
+  const territoryByIndex = new globalThis.Map(
+    getDemoTerritories().flatMap((territory) => territory.hexIndexes.map((index) => [index, territory] as const))
+  );
+  return {
+    ...data,
+    features: data.features.map((feature) => {
+      const h3Index = String(feature.properties?.h3Index ?? "");
+      const owned = ownedByIndex.get(h3Index);
+      if (!owned) return feature;
+      const territory = territoryByIndex.get(h3Index);
+      return {
+        ...feature,
+        id: owned.id,
+        properties: {
+          ...feature.properties,
+          id: owned.id,
+          ownerId: DEMO_USER.id,
+          ownerName: DEMO_USER.name,
+          ownerImage: owned.avatarUrl,
+          title: owned.title,
+          message: owned.message,
+          imageUrl: owned.imageUrl,
+          externalLink: owned.externalLink,
+          priceCents: owned.priceCents,
+          purchaseDate: owned.purchaseDate,
+          status: "MY_OWNED",
+          ...(territory ? {
+            territoryId: territory.id,
+            territoryName: territory.name,
+            territoryColor: territory.color
+          } : {})
+        }
+      };
+    })
+  } satisfies GeoJSON.FeatureCollection<GeoJSON.Polygon>;
+}
+
 function hexFillColorExpression(currentUserId: string): ExpressionSpecification {
   return [
     "case",
+    ["has", "territoryColor"],
+    ["get", "territoryColor"],
     ["==", ["get", "status"], "MY_OWNED"],
-    "#8b5cf6",
+    "#22c55e",
     ["all", ["!=", ["get", "status"], "AVAILABLE"], ["==", ["get", "ownerId"], currentUserId]],
     "#8b5cf6",
     ["==", ["get", "status"], "SPECIAL"],
@@ -159,15 +207,66 @@ function hexLineOpacityExpression(): ExpressionSpecification {
   ] as ExpressionSpecification;
 }
 
+function renderImageMarkers(
+  map: Map,
+  markerStore: MutableRefObject<maplibregl.Marker[]>,
+  selectHex: (hex: SelectedHex | null) => void,
+  data: GeoJSON.FeatureCollection<GeoJSON.Polygon>
+) {
+  markerStore.current.forEach((marker) => marker.remove());
+  markerStore.current = [];
+  if (map.getZoom() < 6) return;
+  const bounds = map.getBounds();
+
+  for (const feature of data.features) {
+    const properties = feature.properties as Record<string, unknown> | null;
+    const imageUrl = properties?.imageUrl ? String(properties.imageUrl) : "";
+    const longitude = Number(properties?.longitude);
+    const latitude = Number(properties?.latitude);
+    if (!imageUrl || !Number.isFinite(longitude) || !Number.isFinite(latitude) || !bounds.contains([longitude, latitude])) continue;
+    const element = document.createElement("button");
+    element.type = "button";
+    element.className = "demo-hex-thumbnail";
+    element.title = String(properties?.title || "Open collectible hex");
+    const image = document.createElement("img");
+    image.src = imageUrl;
+    image.alt = "";
+    element.appendChild(image);
+    element.addEventListener("click", (event) => {
+      event.stopPropagation();
+      selectHex({
+        h3Index: String(properties?.h3Index),
+        lng: longitude,
+        lat: latitude,
+        purchased: {
+          id: String(properties?.id),
+          ownerName: String(properties?.ownerName || "Anonymous owner"),
+          ownerImage: properties?.ownerImage ? String(properties.ownerImage) : null,
+          title: String(properties?.title || ""),
+          message: String(properties?.message || ""),
+          imageUrl,
+          externalLink: properties?.externalLink ? String(properties.externalLink) : null,
+          status: String(properties?.status || "OWNED"),
+          priceCents: Number(properties?.priceCents ?? 100)
+        }
+      });
+      map.flyTo({ center: [longitude, latitude], zoom: Math.max(map.getZoom(), 6), essential: true });
+    });
+    markerStore.current.push(new maplibregl.Marker({ element, anchor: "center" }).setLngLat([longitude, latitude]).addTo(map));
+  }
+}
+
 export function EarthMap() {
   const { data: session } = useSession();
-  const currentUserId = session?.user?.id ?? "";
+  const currentUserId = isClientDemoMode ? DEMO_USER.id : session?.user?.id ?? "";
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<Map | null>(null);
+  const imageMarkersRef = useRef<maplibregl.Marker[]>([]);
   const requestRef = useRef(0);
   const setSelectedHex = useMapStore((state) => state.setSelectedHex);
   const selectedHex = useMapStore((state) => state.selectedHex);
   const refreshToken = useMapStore((state) => state.refreshToken);
+  const focusTarget = useMapStore((state) => state.focusTarget);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -216,9 +315,25 @@ export function EarthMap() {
         const data = await response.json();
         if (requestId !== requestRef.current || !validateGeoJsonResponse(data)) return;
         const source = map.getSource(sourceId) as maplibregl.GeoJSONSource;
-        source.setData(data);
+        const decorated = applyDemoOwnership(data);
+        source.setData(decorated);
+        renderImageMarkers(map, imageMarkersRef, setSelectedHex, decorated);
       } catch (error) {
         console.error("/api/hexes load failed", error);
+      }
+    }
+
+    async function loadTerritories() {
+      if (!map.getSource(territorySourceId)) return;
+      if (isClientDemoMode) return;
+      try {
+        const response = await fetch("/api/territories");
+        const data = await response.json();
+        if (!data?.geojson || data.geojson.type !== "FeatureCollection") return;
+        const source = map.getSource(territorySourceId) as maplibregl.GeoJSONSource;
+        source.setData(data.geojson);
+      } catch (error) {
+        console.error("/api/territories load failed", error);
       }
     }
 
@@ -231,6 +346,10 @@ export function EarthMap() {
         data: { type: "FeatureCollection", features: [] }
       });
       map.addSource(selectedSourceId, {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] }
+      });
+      map.addSource(territorySourceId, {
         type: "geojson",
         data: { type: "FeatureCollection", features: [] }
       });
@@ -259,6 +378,29 @@ export function EarthMap() {
       });
 
       map.addLayer({
+        id: territoryFillLayerId,
+        source: territorySourceId,
+        type: "fill",
+        minzoom: 0,
+        paint: {
+          "fill-color": ["coalesce", ["get", "color"], "#22c55e"],
+          "fill-opacity": 0.08
+        }
+      });
+
+      map.addLayer({
+        id: territoryLineLayerId,
+        source: territorySourceId,
+        type: "line",
+        minzoom: 0,
+        paint: {
+          "line-color": ["coalesce", ["get", "color"], "#22c55e"],
+          "line-opacity": 0.95,
+          "line-width": ["interpolate", ["linear"], ["zoom"], 1, 1.5, 5, 2.5, 10, 4]
+        }
+      });
+
+      map.addLayer({
         id: selectedFillLayerId,
         source: selectedSourceId,
         type: "fill",
@@ -282,6 +424,7 @@ export function EarthMap() {
       });
 
       void loadHexes();
+      void loadTerritories();
     });
 
     map.on("moveend", () => {
@@ -314,8 +457,12 @@ export function EarthMap() {
                   id: String(props.id),
                   ownerName: props.ownerName ? String(props.ownerName) : "Anonymous owner",
                   ownerImage: props.ownerImage ? String(props.ownerImage) : null,
+                  ownerFounderNumber: props.ownerFounderNumber ? Number(props.ownerFounderNumber) : null,
+                  ownerKingdomUnlocked: Boolean(props.ownerKingdomUnlocked),
+                  title: props.title ? String(props.title) : "",
                   message: props.message ? String(props.message) : "",
                   imageUrl: props.imageUrl ? String(props.imageUrl) : null,
+                  externalLink: props.externalLink ? String(props.externalLink) : null,
                   status,
                   priceCents: Number(props.priceCents ?? 100)
                 }
@@ -332,7 +479,7 @@ export function EarthMap() {
         });
         map.flyTo({
           center: [lng, lat],
-          zoom: Math.max(map.getZoom(), 5),
+          zoom: Math.max(map.getZoom(), 5.5),
           essential: true
         });
         return;
@@ -345,9 +492,15 @@ export function EarthMap() {
       });
       const data = await response.json();
       setSelectedHex({ h3Index: data.h3Index, lng: event.lngLat.lng, lat: event.lngLat.lat });
+      map.flyTo({
+        center: [event.lngLat.lng, event.lngLat.lat],
+        zoom: Math.max(map.getZoom(), 5.5),
+        essential: true
+      });
     });
 
     return () => {
+      imageMarkersRef.current.forEach((marker) => marker.remove());
       map.remove();
       mapRef.current = null;
     };
@@ -391,12 +544,35 @@ export function EarthMap() {
       .then((data) => {
         if (!validateGeoJsonResponse(data)) return;
         const source = map.getSource(sourceId) as maplibregl.GeoJSONSource;
-        source.setData(data);
+        const decorated = applyDemoOwnership(data);
+        source.setData(decorated);
+        renderImageMarkers(map, imageMarkersRef, setSelectedHex, decorated);
       })
       .catch((error) => {
         console.error("/api/hexes refresh failed", error);
       });
+    if (isClientDemoMode) return;
+    fetch("/api/territories")
+      .then((response) => response.json())
+      .then((data) => {
+        if (!data?.geojson || data.geojson.type !== "FeatureCollection") return;
+        const source = map.getSource(territorySourceId) as maplibregl.GeoJSONSource;
+        source?.setData(data.geojson);
+      })
+      .catch((error) => {
+        console.error("/api/territories refresh failed", error);
+      });
   }, [refreshToken]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !focusTarget) return;
+    map.flyTo({
+      center: [focusTarget.lng, focusTarget.lat],
+      zoom: Math.max(map.getZoom(), 5.5),
+      essential: true
+    });
+  }, [focusTarget]);
 
   return (
     <div className="relative h-full min-h-0 w-full overflow-hidden bg-[#071525]" style={{ height: "100%", minHeight: 0, width: "100%" }}>

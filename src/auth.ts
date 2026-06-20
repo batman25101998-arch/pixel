@@ -7,7 +7,8 @@ import { PrismaAdapter } from "@auth/prisma-adapter";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { env, isAdminEmail } from "@/lib/env";
+import { DEMO_USER } from "@/lib/demo";
+import { env, isAdminEmail, isDemoMode } from "@/lib/env";
 
 const credentialsSchema = z.object({
   email: z.string().email(),
@@ -224,15 +225,17 @@ const oauthProviders = [
     : null
 ].filter((provider) => provider !== null);
 
-requireOAuthEnv("Google", {
-  GOOGLE_CLIENT_ID: env.GOOGLE_CLIENT_ID,
-  GOOGLE_CLIENT_SECRET: env.GOOGLE_CLIENT_SECRET,
-  AUTH_SECRET: env.AUTH_SECRET,
-  NEXTAUTH_URL: env.NEXTAUTH_URL
-});
+if (!isDemoMode) {
+  requireOAuthEnv("Google", {
+    GOOGLE_CLIENT_ID: env.GOOGLE_CLIENT_ID,
+    GOOGLE_CLIENT_SECRET: env.GOOGLE_CLIENT_SECRET,
+    AUTH_SECRET: env.AUTH_SECRET,
+    NEXTAUTH_URL: env.NEXTAUTH_URL
+  });
+}
 
-export const { handlers, signIn, signOut, auth } = NextAuth({
-  adapter: authAdapter(),
+const nextAuth = NextAuth({
+  adapter: isDemoMode ? undefined : authAdapter(),
   secret: env.AUTH_SECRET,
   trustHost: true,
   session: { strategy: "jwt" },
@@ -240,20 +243,23 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     signIn: "/sign-in"
   },
   providers: [
-    ...oauthProviders,
+    ...(isDemoMode ? [] : oauthProviders),
     Credentials({
       credentials: {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" }
       },
       async authorize(rawCredentials) {
+        if (isDemoMode) {
+          return { id: DEMO_USER.id, email: DEMO_USER.email, name: DEMO_USER.name };
+        }
         const parsed = credentialsSchema.safeParse(rawCredentials);
         if (!parsed.success) return null;
 
         const user = await prisma.user.findUnique({
           where: { email: parsed.data.email.toLowerCase() }
         });
-        if (!user?.passwordHash) return null;
+        if (!user?.passwordHash || user.bannedAt) return null;
 
         const valid = await bcrypt.compare(parsed.data.password, user.passwordHash);
         if (!valid) return null;
@@ -268,21 +274,77 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     })
   ],
   callbacks: {
+    async signIn({ user }) {
+      if (isDemoMode) return true;
+      if (!user.id) return true;
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(user.id)) {
+        return true;
+      }
+      const account = await prisma.user.findUnique({ where: { id: user.id }, select: { bannedAt: true } });
+      return !account?.bannedAt;
+    },
     async jwt({ token, user }) {
+      if (isDemoMode) {
+        token.sub = DEMO_USER.id;
+        token.name = DEMO_USER.name;
+        token.email = DEMO_USER.email;
+        token.role = "USER";
+        token.banned = false;
+        token.founderNumber = DEMO_USER.founderNumber;
+        token.kingdomUnlocked = false;
+        return token;
+      }
       if (user?.id) {
         token.sub = user.id;
       }
-      if (token.email) {
-        token.role = isAdminEmail(token.email) ? "ADMIN" : "USER";
+      if (token.sub) {
+        try {
+          const account = await prisma.user.findUnique({
+            where: { id: token.sub },
+            select: { role: true, bannedAt: true, founderNumber: true, kingdomUnlockedAt: true }
+          });
+          token.role = account?.role === "ADMIN" ? "ADMIN" : "USER";
+          token.banned = Boolean(account?.bannedAt);
+          token.founderNumber = account?.founderNumber ?? null;
+          token.kingdomUnlocked = Boolean(account?.kingdomUnlockedAt);
+        } catch (error) {
+          console.error("Unable to refresh account access state", error);
+          token.role ??= token.email && isAdminEmail(token.email) ? "ADMIN" : "USER";
+          token.banned ??= false;
+          token.founderNumber ??= null;
+          token.kingdomUnlocked ??= false;
+        }
       }
       return token;
     },
     async session({ session, token }) {
       if (session.user) {
-        session.user.id = token.sub ?? "";
+        session.user.id = token.banned ? "" : token.sub ?? "";
         session.user.role = token.role === "ADMIN" ? "ADMIN" : "USER";
+        session.user.banned = Boolean(token.banned);
+        session.user.founderNumber = typeof token.founderNumber === "number" ? token.founderNumber : null;
+        session.user.kingdomUnlocked = Boolean(token.kingdomUnlocked);
       }
       return session;
     }
   }
 });
+
+const demoSession = {
+  user: {
+    id: DEMO_USER.id,
+    name: DEMO_USER.name,
+    email: DEMO_USER.email,
+    image: null,
+    role: "USER" as const,
+    banned: false,
+    founderNumber: DEMO_USER.founderNumber,
+    kingdomUnlocked: false
+  },
+  expires: "2999-12-31T23:59:59.999Z"
+};
+
+export const handlers = nextAuth.handlers;
+export const signIn = nextAuth.signIn;
+export const signOut = nextAuth.signOut;
+export const auth = (isDemoMode ? async () => demoSession : nextAuth.auth) as typeof nextAuth.auth;

@@ -30,7 +30,7 @@ export async function POST(request: Request) {
       passwordHash: await bcrypt.hash(body.data.password, 12),
       role: isAdminEmail(email) ? "ADMIN" : "USER"
     },
-    select: { id: true, email: true, displayName: true }
+    select: { id: true, email: true, displayName: true, founderNumber: true, kingdomUnlockedAt: true }
   });
 
   return NextResponse.json({ user }, { status: 201 });

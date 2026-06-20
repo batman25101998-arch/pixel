@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { cellToBoundary, cellToChildren, cellToLatLng, latLngToCell, polygonToCells } from "h3-js";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { isDemoMode } from "@/lib/env";
 
 const emptyFeatureCollection = { type: "FeatureCollection", features: [] };
 const FIXED_H3_RESOLUTION = 5;
@@ -24,10 +25,14 @@ type PersistedHex = {
   owner: {
     displayName: string;
     avatarUrl: string | null;
+    founderNumber: number | null;
+    kingdomUnlockedAt: Date | null;
   };
   message: string;
+  title: string;
   avatarUrl: string | null;
   imageUrl: string | null;
+  externalLink: string | null;
   priceCents: bigint;
   purchaseDate: Date;
 };
@@ -261,7 +266,7 @@ function cellToPolygonFeature(cell: string, persistedHex?: PersistedHex, current
   const owner = persistedHex
     ? {
         ownerId: persistedHex.ownerId,
-        ownerName: persistedHex.owner.displayName
+      ownerName: persistedHex.owner.displayName
       }
     : mockOwnerForStatus(mockStatus, cell);
 
@@ -282,12 +287,16 @@ function cellToPolygonFeature(cell: string, persistedHex?: PersistedHex, current
       ownerId: owner.ownerId,
       ownerName: owner.ownerName,
       ownerImage: persistedHex?.avatarUrl ?? persistedHex?.owner.avatarUrl ?? null,
+      ownerFounderNumber: persistedHex?.owner.founderNumber ?? null,
+      ownerKingdomUnlocked: Boolean(persistedHex?.owner.kingdomUnlockedAt),
       price: 1,
       priceCents: persistedHex ? Number(persistedHex.priceCents) : 100,
       latitude: lat,
       longitude: lng,
       message: persistedHex?.message ?? "",
+      title: persistedHex?.title ?? "",
       imageUrl: persistedHex?.imageUrl ?? null,
+      externalLink: persistedHex?.externalLink ?? null,
       purchaseDate: persistedHex?.purchaseDate.toISOString() ?? null,
     },
   };
@@ -360,7 +369,7 @@ export async function GET(request: Request) {
 
     const visibleCells = outputCells.slice(0, take);
     let persistedHexes: PersistedHex[] = [];
-    try {
+    if (!isDemoMode) try {
       persistedHexes = (await prisma.hex.findMany({
         where: {
           h3Index: { in: visibleCells }
@@ -369,7 +378,9 @@ export async function GET(request: Request) {
           owner: {
             select: {
               displayName: true,
-              avatarUrl: true
+              avatarUrl: true,
+              founderNumber: true,
+              kingdomUnlockedAt: true
             }
           }
         }

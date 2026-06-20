@@ -8,7 +8,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
   const hex = await prisma.hex.findUnique({
     where: { id },
     include: {
-      owner: { select: { id: true, displayName: true, avatarUrl: true } },
+      owner: { select: { id: true, displayName: true, avatarUrl: true, founderNumber: true, kingdomUnlockedAt: true } },
       territory: true
     }
   });
@@ -37,7 +37,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const saved = await tx.hex.update({
       where: { id },
       data: parsed.data,
-      include: { owner: { select: { id: true, displayName: true, avatarUrl: true } } }
+      include: { owner: { select: { id: true, displayName: true, avatarUrl: true, founderNumber: true, kingdomUnlockedAt: true } } }
     });
 
     if (nextStatus === "FOR_SALE") {

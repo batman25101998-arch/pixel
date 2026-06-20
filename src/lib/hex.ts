@@ -27,12 +27,16 @@ export type EarthHex = {
     id: string;
     displayName: string;
     avatarUrl: string | null;
+    founderNumber?: number | null;
+    kingdomUnlockedAt?: Date | null;
   } | null;
   priceCents: number;
   status: "AVAILABLE" | "OWNED" | "FOR_SALE" | "LOCKED" | "BANNED";
   message: string;
+  title: string;
   avatarUrl: string | null;
   imageUrl: string | null;
+  externalLink: string | null;
 };
 
 export function cellForLngLat(lng: number, lat: number, resolution = env.HEX_RESOLUTION) {
@@ -88,12 +92,14 @@ export function toFeature(hex: {
   h3Index: string;
   latitude: number | { toString(): string };
   longitude: number | { toString(): string };
+  title: string;
   message: string;
   avatarUrl: string | null;
   imageUrl: string | null;
+  externalLink: string | null;
   status: string;
   priceCents: number | bigint;
-  owner: { id: string; displayName: string; avatarUrl: string | null } | null;
+  owner: { id: string; displayName: string; avatarUrl: string | null; founderNumber?: number | null; kingdomUnlockedAt?: Date | null } | null;
 }): HexFeature {
   const latitude = Number(hex.latitude);
   const longitude = Number(hex.longitude);
@@ -111,9 +117,13 @@ export function toFeature(hex: {
       longitude,
       ownerId: hex.owner?.id ?? null,
       ownerName: hex.owner?.displayName ?? null,
+      ownerFounderNumber: hex.owner?.founderNumber ?? null,
+      ownerKingdomUnlocked: Boolean(hex.owner?.kingdomUnlockedAt),
       ownerImage: hex.avatarUrl ?? hex.owner?.avatarUrl ?? null,
       message: hex.message,
+      title: hex.title,
       imageUrl: hex.imageUrl,
+      externalLink: hex.externalLink,
       status: hex.status,
       priceCents: Number(hex.priceCents)
     }
@@ -131,9 +141,11 @@ export function virtualHexForCell(h3Index: string, priceCents = 100): EarthHex {
     owner: null,
     priceCents,
     status: "AVAILABLE",
+    title: "",
     message: "",
     avatarUrl: null,
-    imageUrl: null
+    imageUrl: null,
+    externalLink: null
   };
 }
 

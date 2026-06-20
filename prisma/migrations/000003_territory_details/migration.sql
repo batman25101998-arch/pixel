@@ -1,0 +1,3 @@
+ALTER TABLE "territories"
+ADD COLUMN "flag" VARCHAR(16) NOT NULL DEFAULT '🏳️',
+ADD COLUMN "statistics" JSONB NOT NULL DEFAULT '{}';

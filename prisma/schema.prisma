@@ -82,6 +82,10 @@ model User {
   avatarUrl     String?   @map("avatar_url")
   bio           String?   @db.VarChar(180)
   role          UserRole  @default(USER)
+  founderNumber Int?      @unique @default(dbgenerated("next_founder_number()")) @map("founder_number")
+  kingdomUnlockedAt DateTime? @map("kingdom_unlocked_at") @db.Timestamptz(6)
+  bannedAt      DateTime? @map("banned_at") @db.Timestamptz(6)
+  banReason     String?   @map("ban_reason") @db.VarChar(240)
   emailVerified DateTime? @map("email_verified") @db.Timestamptz(6)
   lastLoginAt   DateTime? @map("last_login_at") @db.Timestamptz(6)
   createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -95,6 +99,7 @@ model User {
   sellerDeals    Transaction[] @relation("TransactionSeller")
   payments       Payment[]
   listings       Marketplace[]
+  adminActions   AdminAuditLog[] @relation("AdminActor")
 
   @@index([role, createdAt])
   @@index([displayName])
@@ -130,13 +135,16 @@ model Hex {
   r              Int
   latitude       Decimal   @db.Decimal(9, 6)
   longitude      Decimal   @db.Decimal(9, 6)
+  countryCode    String?   @map("country_code") @db.Char(2)
   ownerId        String    @map("owner_id") @db.Uuid
   territoryId    String?   @map("territory_id") @db.Uuid
   purchaseDate   DateTime  @default(now()) @map("purchase_date") @db.Timestamptz(6)
   priceCents     BigInt    @default(100) @map("price_cents")
   message        String    @default("") @db.VarChar(240)
+  title          String    @default("") @db.VarChar(80)
   avatarUrl      String?   @map("avatar_url")
   imageUrl       String?   @map("image_url")
+  externalLink   String?   @map("external_link")
   status         HexStatus @default(OWNED)
   geom           Unsupported("geometry(Polygon,4326)")?
   createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -148,6 +156,7 @@ model Hex {
   transactions Transaction[]
 
   @@index([ownerId, purchaseDate(sort: Desc)])
+  @@index([ownerId, countryCode])
   @@index([territoryId])
   @@index([resolution, q, r])
   @@index([latitude, longitude])
@@ -160,8 +169,12 @@ model Territory {
   ownerId     String          @map("owner_id") @db.Uuid
   name        String          @db.VarChar(80)
   slug        String          @unique @db.VarChar(96)
+  flag        String          @default("🏳️") @db.VarChar(16)
   description String          @default("") @db.VarChar(240)
+  bannerImageUrl String?       @map("banner_image_url")
+  flagImageUrl   String?       @map("flag_image_url")
   color       String          @default("#22c55e") @db.VarChar(16)
+  statistics  Json            @default("{}")
   status      TerritoryStatus @default(ACTIVE)
   hexCount    Int             @default(0) @map("hex_count")
   bounds      Unsupported("geometry(Polygon,4326)")?
@@ -238,6 +251,8 @@ model Payment {
   currency              String        @default("usd") @db.Char(3)
   metadata              Json          @default("{}")
   rawEvent              Json?         @map("raw_event")
+  providerRefundId      String?       @unique @map("provider_refund_id")
+  refundedAt            DateTime?     @map("refunded_at") @db.Timestamptz(6)
   createdAt             DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt             DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
 
@@ -264,4 +279,21 @@ model Session {
   @@index([userId, expiresAt])
   @@index([expiresAt])
   @@map("sessions")
+}
+
+model AdminAuditLog {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  adminId    String   @map("admin_id") @db.Uuid
+  action     String   @db.VarChar(64)
+  targetType String   @map("target_type") @db.VarChar(32)
+  targetId   String   @map("target_id") @db.VarChar(191)
+  metadata   Json     @default("{}")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  admin User @relation("AdminActor", fields: [adminId], references: [id], onDelete: Restrict)
+
+  @@index([adminId, createdAt(sort: Desc)])
+  @@index([targetType, targetId, createdAt(sort: Desc)])
+  @@index([action, createdAt(sort: Desc)])
+  @@map("admin_audit_logs")
 }

@@ -3,54 +3,16 @@ import { redirect } from "next/navigation";
 import { CalendarDays, Globe2, Hexagon, Landmark, ReceiptText, TrendingUp, Wallet } from "lucide-react";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { countryForCoordinates, countryNameForCoordinates } from "@/lib/geography";
 import { money } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-
-type CountryBox = {
-  name: string;
-  west: number;
-  south: number;
-  east: number;
-  north: number;
-};
-
-const countryBoxes: CountryBox[] = [
-  { name: "United States", west: -125, south: 24, east: -66, north: 49 },
-  { name: "Canada", west: -141, south: 49, east: -52, north: 70 },
-  { name: "Mexico", west: -118, south: 14, east: -86, north: 33 },
-  { name: "Brazil", west: -74, south: -34, east: -34, north: 6 },
-  { name: "Argentina", west: -74, south: -56, east: -53, north: -21 },
-  { name: "United Kingdom", west: -8, south: 49, east: 2, north: 59 },
-  { name: "France", west: -5, south: 42, east: 8, north: 51 },
-  { name: "Spain", west: -10, south: 36, east: 4, north: 44 },
-  { name: "Germany", west: 5, south: 47, east: 16, north: 55 },
-  { name: "Italy", west: 6, south: 36, east: 19, north: 47 },
-  { name: "Poland", west: 14, south: 49, east: 24, north: 55 },
-  { name: "Ukraine", west: 22, south: 44, east: 41, north: 53 },
-  { name: "Russia", west: 30, south: 41, east: 180, north: 82 },
-  { name: "South Africa", west: 16, south: -35, east: 33, north: -22 },
-  { name: "Egypt", west: 25, south: 22, east: 36, north: 32 },
-  { name: "Nigeria", west: 2, south: 4, east: 15, north: 14 },
-  { name: "India", west: 68, south: 7, east: 98, north: 36 },
-  { name: "China", west: 73, south: 18, east: 135, north: 54 },
-  { name: "Japan", west: 129, south: 31, east: 146, north: 46 },
-  { name: "Indonesia", west: 95, south: -11, east: 141, north: 6 },
-  { name: "Australia", west: 112, south: -44, east: 154, north: -10 }
-];
-
-function countryFor(latitude: number, longitude: number) {
-  return (
-    countryBoxes.find(
-      (country) =>
-        longitude >= country.west &&
-        longitude <= country.east &&
-        latitude >= country.south &&
-        latitude <= country.north
-    )?.name ?? "International waters"
-  );
-}
+import { FounderBadge } from "@/components/founder-badge";
+import { KingdomBadge } from "@/components/kingdom-badge";
+import { GamificationBadges } from "@/components/gamification-badges";
+import { getConnectedHexGroups, getTerritoryLevel, getUserBadges } from "@/lib/gamification";
+import { isDemoMode } from "@/lib/env";
 
 function formatDate(value: Date) {
   return new Intl.DateTimeFormat("en", {
@@ -61,6 +23,8 @@ function formatDate(value: Date) {
 }
 
 export default async function ProfilePage() {
+  if (isDemoMode) redirect("/dashboard");
+
   const session = await auth();
   if (!session?.user?.id) redirect("/sign-in");
 
@@ -85,7 +49,7 @@ export default async function ProfilePage() {
         where: { status: "COMPLETED" },
         orderBy: { completedAt: "desc" },
         take: 10,
-        include: { hex: true, buyer: { select: { displayName: true } } }
+        include: { hex: true, buyer: { select: { displayName: true, founderNumber: true, kingdomUnlockedAt: true } } }
       }
     }
   });
@@ -96,6 +60,7 @@ export default async function ProfilePage() {
   const allOwnedHexes = await prisma.hex.findMany({
     where: { ownerId: user.id },
     select: {
+      h3Index: true,
       latitude: true,
       longitude: true,
       priceCents: true
@@ -105,9 +70,20 @@ export default async function ProfilePage() {
   const totalSpent = user.buyerDeals.reduce((sum, transaction) => sum + Number(transaction.amountCents), 0);
   const estimatedValue = allOwnedHexes.reduce((sum, hex) => sum + Number(hex.priceCents), 0);
   const countries = new Set(
-    allOwnedHexes.map((hex) => countryFor(Number(hex.latitude), Number(hex.longitude)))
+    allOwnedHexes
+      .map((hex) => countryForCoordinates(Number(hex.latitude), Number(hex.longitude))?.name)
+      .filter((country): country is string => Boolean(country))
   );
   const fallbackName = user.displayName || user.username;
+  const badges = getUserBadges({
+    id: user.id,
+    name: fallbackName,
+    founderNumber: user.founderNumber,
+    ownedHexes: allOwnedHexes.map((hex) => ({ h3Index: hex.h3Index, priceCents: Number(hex.priceCents) })),
+    territories: user.territories.map((territory) => ({ hexCount: territory._count.hexes })),
+    marketplaceListings: user.ownedHexes.filter((hex) => hex.status === "FOR_SALE").length
+  });
+  const territoryLevel = getTerritoryLevel(getConnectedHexGroups(allOwnedHexes.map((hex) => hex.h3Index))[0]?.length ?? 0);
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8">
@@ -119,8 +95,13 @@ export default async function ProfilePage() {
           </Avatar>
           <div>
             <p className="text-sm uppercase tracking-wide text-muted-foreground">Owner profile</p>
-            <h1 className="text-3xl font-semibold">{user.displayName}</h1>
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-3xl font-semibold">{user.displayName}</h1>
+              <FounderBadge founderNumber={user.founderNumber} />
+              <KingdomBadge unlocked={Boolean(user.kingdomUnlockedAt)} />
+            </div>
             <p className="text-muted-foreground">@{user.username}</p>
+            <div className="mt-2"><GamificationBadges badges={badges} compact /></div>
           </div>
         </div>
         <Button asChild>
@@ -128,7 +109,7 @@ export default async function ProfilePage() {
         </Button>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0">
             <CardTitle className="text-sm font-medium">Joined</CardTitle>
@@ -138,6 +119,7 @@ export default async function ProfilePage() {
             <p className="text-2xl font-semibold">{formatDate(user.createdAt)}</p>
           </CardContent>
         </Card>
+        <Card><CardHeader><CardTitle className="text-sm font-medium">Territory level</CardTitle></CardHeader><CardContent><p className="text-2xl font-semibold">{territoryLevel}</p></CardContent></Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0">
             <CardTitle className="text-sm font-medium">Owned hexes</CardTitle>
@@ -201,7 +183,7 @@ export default async function ProfilePage() {
                     <div>
                       <p className="break-all font-medium">{hex.h3Index}</p>
                       <p className="text-sm text-muted-foreground">
-                        {countryFor(Number(hex.latitude), Number(hex.longitude))} · purchased {formatDate(hex.purchaseDate)}
+                        {countryNameForCoordinates(Number(hex.latitude), Number(hex.longitude))} · purchased {formatDate(hex.purchaseDate)}
                       </p>
                     </div>
                     <span className="font-semibold text-secondary">{money(Number(hex.priceCents))}</span>
@@ -272,7 +254,12 @@ export default async function ProfilePage() {
                       <span className="font-semibold">{money(Number(transaction.amountCents))}</span>
                     </div>
                     <p className="mt-1 text-sm text-muted-foreground">
-                      Sold to {transaction.buyer.displayName} · {transaction.completedAt ? formatDate(transaction.completedAt) : formatDate(transaction.createdAt)}
+                      <span className="inline-flex flex-wrap items-center gap-2">
+                        Sold to {transaction.buyer.displayName}
+                        <FounderBadge founderNumber={transaction.buyer.founderNumber} compact />
+                        <KingdomBadge unlocked={Boolean(transaction.buyer.kingdomUnlockedAt)} compact />
+                        · {transaction.completedAt ? formatDate(transaction.completedAt) : formatDate(transaction.createdAt)}
+                      </span>
                     </p>
                   </div>
                 ))

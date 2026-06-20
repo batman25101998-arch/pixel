@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { gridDisk } from "h3-js";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 
@@ -32,7 +33,9 @@ export async function GET(request: Request) {
                 select: {
                   id: true,
                   displayName: true,
-                  avatarUrl: true
+                  avatarUrl: true,
+                  founderNumber: true,
+                  kingdomUnlockedAt: true
                 }
               }
             }
@@ -57,12 +60,22 @@ export async function GET(request: Request) {
               select: {
                 id: true,
                 displayName: true,
-                avatarUrl: true
+                avatarUrl: true,
+                founderNumber: true,
+                kingdomUnlockedAt: true
               }
             }
           }
         })
       : null);
+  const adjacentOwnedCount = payment.status === "SUCCEEDED" && hex
+    ? await prisma.hex.count({
+        where: {
+          ownerId: session.user.id,
+          h3Index: { in: gridDisk(hex.h3Index, 1).filter((index) => index !== hex.h3Index) }
+        }
+      })
+    : 0;
 
   return NextResponse.json({
     status: payment.status,
@@ -76,8 +89,13 @@ export async function GET(request: Request) {
             longitude: Number(hex.longitude),
             ownerName: hex.owner.displayName,
             ownerImage: hex.avatarUrl ?? hex.owner.avatarUrl,
+            ownerFounderNumber: hex.owner.founderNumber,
+            ownerKingdomUnlocked: Boolean(hex.owner.kingdomUnlockedAt),
+            adjacentOwnedCount,
+            title: hex.title,
             message: hex.message,
             imageUrl: hex.imageUrl,
+            externalLink: hex.externalLink,
             priceCents: Number(hex.priceCents),
             purchaseDate: hex.purchaseDate.toISOString()
           }

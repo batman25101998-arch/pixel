@@ -1,16 +1,48 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { cellToLatLng } from "h3-js";
 import { Loader2, ShoppingCart } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { isClientDemoMode } from "@/lib/demo";
+import { buyDemoHex, getDemoOwnedHexes } from "@/lib/demo-storage";
 
-export function BuyListingButton({ h3Index }: { h3Index: string }) {
+export function BuyListingButton({ h3Index, priceCents = 100 }: { h3Index: string; priceCents?: number }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [owned, setOwned] = useState(false);
+
+  useEffect(() => {
+    if (isClientDemoMode) setOwned(getDemoOwnedHexes().some((hex) => hex.h3Index === h3Index));
+  }, [h3Index]);
 
   async function buy() {
     setBusy(true);
     setError(null);
+    if (isClientDemoMode) {
+      if (getDemoOwnedHexes().some((hex) => hex.h3Index === h3Index)) {
+        setOwned(true);
+        setBusy(false);
+        return;
+      }
+      try {
+        const [latitude, longitude] = cellToLatLng(h3Index);
+        buyDemoHex({
+          h3Index,
+          latitude,
+          longitude,
+          message: "Purchased from the demo marketplace.",
+          avatarUrl: null,
+          imageUrl: null,
+          priceCents
+        });
+        setOwned(true);
+      } catch {
+        setError("This demo listing could not be purchased.");
+      }
+      setBusy(false);
+      return;
+    }
     const response = await fetch("/api/checkout", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -29,9 +61,9 @@ export function BuyListingButton({ h3Index }: { h3Index: string }) {
 
   return (
     <div className="mt-4 space-y-2">
-      <Button className="w-full" onClick={buy} disabled={busy}>
+      <Button className="w-full" onClick={buy} disabled={busy || owned}>
         {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShoppingCart className="h-4 w-4" />}
-        {busy ? "Starting checkout..." : "Buy now"}
+        {busy ? "Starting checkout..." : owned ? "Owned by Demo User" : "Buy now"}
       </Button>
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
     </div>

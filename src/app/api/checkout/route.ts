@@ -4,9 +4,12 @@ import { prisma } from "@/lib/prisma";
 import { stripe } from "@/lib/stripe";
 import { checkoutSchema } from "@/lib/validators";
 import { assertCell } from "@/lib/hex";
-import { env } from "@/lib/env";
+import { env, isDemoMode } from "@/lib/env";
 
 export async function POST(request: Request) {
+  if (isDemoMode) {
+    return NextResponse.json({ error: "Demo purchases are completed locally in the browser." }, { status: 400 });
+  }
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Sign in to purchase a hex." }, { status: 401 });
 
@@ -46,9 +49,11 @@ export async function POST(request: Request) {
         hexId: existing?.id,
         marketplaceId: activeListing?.id,
         sellerId: activeListing?.sellerId,
+        title: parsed.data.title,
         message: parsed.data.message,
         avatarUrl: parsed.data.avatarUrl,
-        imageUrl: parsed.data.imageUrl
+        imageUrl: parsed.data.imageUrl,
+        externalLink: parsed.data.externalLink
       }
     }
   });

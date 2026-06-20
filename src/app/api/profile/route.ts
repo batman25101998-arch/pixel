@@ -13,7 +13,7 @@ export async function PATCH(request: Request) {
   const user = await prisma.user.update({
     where: { id: session.user.id },
     data: parsed.data,
-    select: { id: true, displayName: true, bio: true, avatarUrl: true }
+    select: { id: true, displayName: true, bio: true, avatarUrl: true, founderNumber: true, kingdomUnlockedAt: true }
   });
 
   return NextResponse.json({ user });

@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { stripe } from "@/lib/stripe";
 import { env } from "@/lib/env";
 import { axialForCell, centerForCell, geoJsonPolygonSql } from "@/lib/hex";
+import { countryForCoordinates } from "@/lib/geography";
 
 export async function POST(request: Request) {
   const body = await request.text();
@@ -32,12 +33,15 @@ export async function POST(request: Request) {
       marketplaceId?: string;
       sellerId?: string;
       message?: string;
+      title?: string;
       avatarUrl?: string;
       imageUrl?: string;
+      externalLink?: string;
     };
     if (!metadata.h3Index) return NextResponse.json({ received: true });
 
     const center = centerForCell(metadata.h3Index);
+    const countryCode = countryForCoordinates(center.latitude, center.longitude)?.code ?? null;
     const axial = axialForCell(metadata.h3Index);
     const polygon = geoJsonPolygonSql(metadata.h3Index);
 
@@ -72,10 +76,13 @@ export async function POST(request: Request) {
             where: { id: current.id },
             data: {
               ownerId: payment.userId,
+              countryCode,
               purchaseDate: new Date(),
+              title: metadata.title ?? current.title,
               message: metadata.message ?? current.message,
               avatarUrl: metadata.avatarUrl ?? current.avatarUrl,
               imageUrl: metadata.imageUrl ?? current.imageUrl,
+              externalLink: metadata.externalLink ?? current.externalLink,
               status: "OWNED",
               priceCents: payment.amountCents
             }
@@ -87,13 +94,24 @@ export async function POST(request: Request) {
               r: axial.r,
               latitude: center.latitude,
               longitude: center.longitude,
+              countryCode,
               ownerId: payment.userId,
               priceCents: 100,
+              title: metadata.title ?? "",
               message: metadata.message ?? "",
               avatarUrl: metadata.avatarUrl,
-              imageUrl: metadata.imageUrl
+              imageUrl: metadata.imageUrl,
+              externalLink: metadata.externalLink
             }
           });
+
+      const ownedHexCount = await tx.hex.count({ where: { ownerId: payment.userId } });
+      if (ownedHexCount >= 1000) {
+        await tx.user.updateMany({
+          where: { id: payment.userId, kingdomUnlockedAt: null },
+          data: { kingdomUnlockedAt: new Date() }
+        });
+      }
 
       if (activeListing) {
         await tx.marketplace.update({
