@@ -4,7 +4,7 @@ import Stripe from "stripe";
 import { prisma } from "@/lib/prisma";
 import { stripe } from "@/lib/stripe";
 import { env } from "@/lib/env";
-import { axialForCell, centerForCell, geoJsonPolygonSql } from "@/lib/hex";
+import { axialForCell, centerForCell } from "@/lib/hex";
 import { countryForCoordinates } from "@/lib/geography";
 
 export async function POST(request: Request) {
@@ -43,7 +43,6 @@ export async function POST(request: Request) {
     const center = centerForCell(metadata.h3Index);
     const countryCode = countryForCoordinates(center.latitude, center.longitude)?.code ?? null;
     const axial = axialForCell(metadata.h3Index);
-    const polygon = geoJsonPolygonSql(metadata.h3Index);
 
     await prisma.$transaction(async (tx) => {
       const current = await tx.hex.findUnique({
@@ -119,12 +118,6 @@ export async function POST(request: Request) {
           data: { status: "SOLD", active: false }
         });
       }
-
-      await tx.$executeRawUnsafe(
-        `UPDATE hexes SET geom = ST_SetSRID(ST_GeomFromGeoJSON($1), 4326) WHERE id = $2::uuid`,
-        polygon,
-        hex.id
-      );
 
       await tx.payment.update({
         where: { id: payment.id },

@@ -153,6 +153,74 @@ function applyDemoOwnership(data: GeoJSON.FeatureCollection<GeoJSON.Polygon>) {
   } satisfies GeoJSON.FeatureCollection<GeoJSON.Polygon>;
 }
 
+type PersistedHexResponse = {
+  hex: {
+    id: string;
+    h3Index: string;
+    latitude: number | null;
+    longitude: number | null;
+    ownerName: string;
+    ownerImage: string | null;
+    avatarUrl: string | null;
+    ownerFounderNumber: number | null;
+    ownerKingdomUnlocked: boolean;
+    title: string;
+    message: string;
+    imageUrl: string | null;
+    externalLink: string | null;
+    status: string;
+    priceCents: number;
+  } | null;
+};
+
+function selectedHexFromProperties(props: Record<string, string | number | null>): SelectedHex {
+  const status = props.status ? String(props.status) : "AVAILABLE";
+  return {
+    h3Index: String(props.h3Index),
+    lng: Number(props.longitude),
+    lat: Number(props.latitude),
+    purchased: status === "AVAILABLE" ? undefined : {
+      id: String(props.id),
+      ownerName: props.ownerName ? String(props.ownerName) : "Anonymous owner",
+      ownerImage: props.ownerImage ? String(props.ownerImage) : null,
+      ownerFounderNumber: props.ownerFounderNumber ? Number(props.ownerFounderNumber) : null,
+      ownerKingdomUnlocked: Boolean(props.ownerKingdomUnlocked),
+      title: props.title ? String(props.title) : "",
+      message: props.message ? String(props.message) : "",
+      imageUrl: props.imageUrl ? String(props.imageUrl) : null,
+      externalLink: props.externalLink ? String(props.externalLink) : null,
+      status,
+      priceCents: Number(props.priceCents ?? 100)
+    }
+  };
+}
+
+async function loadPersistedSelection(selection: SelectedHex) {
+  const response = await fetch(`/api/hexes/${encodeURIComponent(selection.h3Index)}`, { cache: "no-store" });
+  if (!response.ok) throw new Error("Selected hex could not be loaded.");
+  const data = (await response.json()) as PersistedHexResponse;
+  if (!data.hex) return { ...selection, purchased: undefined };
+  return {
+    h3Index: data.hex.h3Index,
+    lng: data.hex.longitude ?? selection.lng,
+    lat: data.hex.latitude ?? selection.lat,
+    purchased: {
+      id: data.hex.id,
+      ownerName: data.hex.ownerName,
+      ownerImage: data.hex.ownerImage,
+      avatarUrl: data.hex.avatarUrl,
+      ownerFounderNumber: data.hex.ownerFounderNumber,
+      ownerKingdomUnlocked: data.hex.ownerKingdomUnlocked,
+      title: data.hex.title,
+      message: data.hex.message,
+      imageUrl: data.hex.imageUrl,
+      externalLink: data.hex.externalLink,
+      status: data.hex.status,
+      priceCents: data.hex.priceCents
+    }
+  } satisfies SelectedHex;
+}
+
 function hexFillColorExpression(currentUserId: string): ExpressionSpecification {
   return [
     "case",
@@ -443,30 +511,19 @@ export function EarthMap() {
       const features = map.queryRenderedFeatures(event.point, { layers: [fillLayerId] });
       if (features[0]) {
         const props = features[0].properties as Record<string, string | number | null>;
-        const status = props.status ? String(props.status) : "AVAILABLE";
         const lng = Number(props.longitude);
         const lat = Number(props.latitude);
-        setSelectedHex({
-          h3Index: String(props.h3Index),
-          lng,
-          lat,
-          purchased:
-            status === "AVAILABLE"
-              ? undefined
-              : {
-                  id: String(props.id),
-                  ownerName: props.ownerName ? String(props.ownerName) : "Anonymous owner",
-                  ownerImage: props.ownerImage ? String(props.ownerImage) : null,
-                  ownerFounderNumber: props.ownerFounderNumber ? Number(props.ownerFounderNumber) : null,
-                  ownerKingdomUnlocked: Boolean(props.ownerKingdomUnlocked),
-                  title: props.title ? String(props.title) : "",
-                  message: props.message ? String(props.message) : "",
-                  imageUrl: props.imageUrl ? String(props.imageUrl) : null,
-                  externalLink: props.externalLink ? String(props.externalLink) : null,
-                  status,
-                  priceCents: Number(props.priceCents ?? 100)
-                }
-        });
+        const selection = selectedHexFromProperties(props);
+        setSelectedHex(selection);
+        if (!isClientDemoMode) {
+          void loadPersistedSelection(selection)
+            .then((persistedSelection) => {
+              if (useMapStore.getState().selectedHex?.h3Index === persistedSelection.h3Index) {
+                setSelectedHex(persistedSelection);
+              }
+            })
+            .catch((error) => console.error("Selected hex lookup failed", error));
+        }
 
         const selectedSource = map.getSource(selectedSourceId) as maplibregl.GeoJSONSource;
         selectedSource.setData({

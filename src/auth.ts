@@ -15,18 +15,10 @@ const credentialsSchema = z.object({
   password: z.string().min(8)
 });
 
-function requireOAuthEnv(provider: string, values: Record<string, string | undefined>) {
-  const missing = Object.entries(values)
-    .filter(([, value]) => !value)
-    .map(([key]) => key);
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-  if (missing.length) {
-    throw new Error(
-      `${provider} login is not configured. Missing environment variable${missing.length === 1 ? "" : "s"}: ${missing.join(", ")}. ` +
-        "For local development set NEXTAUTH_URL=http://localhost:3000."
-    );
-  }
-}
+export const googleAuthConfigured = Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET);
+export const appleAuthConfigured = Boolean(env.APPLE_CLIENT_ID && env.APPLE_CLIENT_SECRET);
 
 function toAdapterUser(user: {
   id: string;
@@ -42,50 +34,6 @@ function toAdapterUser(user: {
     name: user.displayName,
     image: user.avatarUrl
   } satisfies AdapterUser;
-}
-
-type RawUser = {
-  id: string;
-  email: string;
-  email_verified: Date | null;
-  display_name: string;
-  avatar_url: string | null;
-};
-
-function toAdapterUserFromRaw(user: RawUser) {
-  return {
-    id: user.id,
-    email: user.email,
-    emailVerified: user.email_verified,
-    name: user.display_name,
-    image: user.avatar_url
-  } satisfies AdapterUser;
-}
-
-async function ensureAccountsTable() {
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS accounts (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE ON UPDATE CASCADE,
-      type VARCHAR(32) NOT NULL,
-      provider VARCHAR(64) NOT NULL,
-      provider_account_id VARCHAR(191) NOT NULL,
-      refresh_token TEXT,
-      access_token TEXT,
-      expires_at INTEGER,
-      token_type TEXT,
-      scope TEXT,
-      id_token TEXT,
-      session_state TEXT
-    )
-  `);
-  await prisma.$executeRawUnsafe(`
-    CREATE UNIQUE INDEX IF NOT EXISTS accounts_provider_provider_account_id_key
-    ON accounts(provider, provider_account_id)
-  `);
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS accounts_user_id_idx ON accounts(user_id)
-  `);
 }
 
 async function uniqueUsername(email: string) {
@@ -106,13 +54,13 @@ async function uniqueUsername(email: string) {
 }
 
 function authAdapter(): Adapter {
-  const base = PrismaAdapter(prisma) as Adapter;
+  const base = PrismaAdapter(prisma);
 
   return {
     ...base,
     async createUser(data) {
       if (!data.email) {
-        throw new Error("OAuth provider did not return an email address.");
+        throw new Error("Google did not return an email address.");
       }
 
       const email = data.email.toLowerCase();
@@ -123,10 +71,10 @@ function authAdapter(): Adapter {
           displayName: (data.name?.trim() || email.split("@")[0]).slice(0, 48),
           avatarUrl: data.image,
           emailVerified: data.emailVerified,
-          role: isAdminEmail(email) ? "ADMIN" : "USER"
+          role: isAdminEmail(email) ? "ADMIN" : "USER",
+          lastLoginAt: new Date()
         }
       });
-
       return toAdapterUser(user);
     },
     async getUser(id) {
@@ -138,101 +86,49 @@ function authAdapter(): Adapter {
       return user ? toAdapterUser(user) : null;
     },
     async getUserByAccount(providerAccountId) {
-      await ensureAccountsTable();
-      const users = await prisma.$queryRaw<RawUser[]>`
-        SELECT users.id, users.email, users.email_verified, users.display_name, users.avatar_url
-        FROM accounts
-        INNER JOIN users ON users.id = accounts.user_id
-        WHERE accounts.provider = ${providerAccountId.provider}
-          AND accounts.provider_account_id = ${providerAccountId.providerAccountId}
-        LIMIT 1
-      `;
-      return users[0] ? toAdapterUserFromRaw(users[0]) : null;
-    },
-    async linkAccount(account) {
-      await ensureAccountsTable();
-      await prisma.$executeRaw`
-        INSERT INTO accounts (
-          user_id,
-          type,
-          provider,
-          provider_account_id,
-          refresh_token,
-          access_token,
-          expires_at,
-          token_type,
-          scope,
-          id_token,
-          session_state
-        )
-        VALUES (
-          ${account.userId}::uuid,
-          ${account.type},
-          ${account.provider},
-          ${account.providerAccountId},
-          ${account.refresh_token ?? null},
-          ${account.access_token ?? null},
-          ${account.expires_at ?? null},
-          ${account.token_type ?? null},
-          ${account.scope ?? null},
-          ${account.id_token ?? null},
-          ${account.session_state ?? null}
-        )
-        ON CONFLICT (provider, provider_account_id) DO UPDATE SET
-          refresh_token = EXCLUDED.refresh_token,
-          access_token = EXCLUDED.access_token,
-          expires_at = EXCLUDED.expires_at,
-          token_type = EXCLUDED.token_type,
-          scope = EXCLUDED.scope,
-          id_token = EXCLUDED.id_token,
-          session_state = EXCLUDED.session_state
-      `;
-      return account;
-    },
-    async unlinkAccount(providerAccountId) {
-      await ensureAccountsTable();
-      await prisma.$executeRaw`
-        DELETE FROM accounts
-        WHERE provider = ${providerAccountId.provider}
-          AND provider_account_id = ${providerAccountId.providerAccountId}
-      `;
+      const account = await prisma.account.findUnique({
+        where: {
+          provider_providerAccountId: {
+            provider: providerAccountId.provider,
+            providerAccountId: providerAccountId.providerAccountId
+          }
+        },
+        include: { user: true }
+      });
+      return account ? toAdapterUser(account.user) : null;
     },
     async updateUser(data) {
       const user = await prisma.user.update({
         where: { id: data.id },
         data: {
           email: data.email?.toLowerCase(),
-          displayName: data.name ?? undefined,
-          avatarUrl: data.image ?? undefined,
+          displayName: data.name?.trim() || undefined,
+          avatarUrl: data.image,
           emailVerified: data.emailVerified
         }
       });
       return toAdapterUser(user);
+    },
+    async deleteUser(id) {
+      return toAdapterUser(await prisma.user.delete({ where: { id } }));
     }
   };
 }
 
 const oauthProviders = [
-  Google({
-    clientId: env.GOOGLE_CLIENT_ID ?? "",
-    clientSecret: env.GOOGLE_CLIENT_SECRET ?? ""
-  }),
-  env.APPLE_CLIENT_ID && env.APPLE_CLIENT_SECRET
+  googleAuthConfigured
+    ? Google({
+        clientId: env.GOOGLE_CLIENT_ID!,
+        clientSecret: env.GOOGLE_CLIENT_SECRET!
+      })
+    : null,
+  appleAuthConfigured
     ? Apple({
-        clientId: env.APPLE_CLIENT_ID,
-        clientSecret: env.APPLE_CLIENT_SECRET
+        clientId: env.APPLE_CLIENT_ID!,
+        clientSecret: env.APPLE_CLIENT_SECRET!
       })
     : null
 ].filter((provider) => provider !== null);
-
-if (!isDemoMode) {
-  requireOAuthEnv("Google", {
-    GOOGLE_CLIENT_ID: env.GOOGLE_CLIENT_ID,
-    GOOGLE_CLIENT_SECRET: env.GOOGLE_CLIENT_SECRET,
-    AUTH_SECRET: env.AUTH_SECRET,
-    NEXTAUTH_URL: env.NEXTAUTH_URL
-  });
-}
 
 const nextAuth = NextAuth({
   adapter: isDemoMode ? undefined : authAdapter(),
@@ -253,6 +149,7 @@ const nextAuth = NextAuth({
         if (isDemoMode) {
           return { id: DEMO_USER.id, email: DEMO_USER.email, name: DEMO_USER.name };
         }
+
         const parsed = credentialsSchema.safeParse(rawCredentials);
         if (!parsed.success) return null;
 
@@ -275,18 +172,18 @@ const nextAuth = NextAuth({
   ],
   callbacks: {
     async signIn({ user }) {
-      if (isDemoMode) return true;
-      if (!user.id) return true;
-      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(user.id)) {
-        return true;
-      }
-      const account = await prisma.user.findUnique({ where: { id: user.id }, select: { bannedAt: true } });
+      if (isDemoMode || !user.id || !uuidPattern.test(user.id)) return true;
+      const account = await prisma.user.findUnique({
+        where: { id: user.id },
+        select: { bannedAt: true }
+      });
       return !account?.bannedAt;
     },
     async jwt({ token, user }) {
       if (isDemoMode) {
         token.sub = DEMO_USER.id;
         token.name = DEMO_USER.name;
+        token.username = DEMO_USER.name;
         token.email = DEMO_USER.email;
         token.role = "USER";
         token.banned = false;
@@ -294,19 +191,33 @@ const nextAuth = NextAuth({
         token.kingdomUnlocked = false;
         return token;
       }
-      if (user?.id) {
-        token.sub = user.id;
-      }
-      if (token.sub) {
+
+      if (user?.id) token.sub = user.id;
+      if (token.sub && uuidPattern.test(token.sub)) {
         try {
           const account = await prisma.user.findUnique({
             where: { id: token.sub },
-            select: { role: true, bannedAt: true, founderNumber: true, kingdomUnlockedAt: true }
+            select: {
+              email: true,
+              displayName: true,
+              username: true,
+              avatarUrl: true,
+              role: true,
+              bannedAt: true,
+              founderNumber: true,
+              kingdomUnlockedAt: true
+            }
           });
-          token.role = account?.role === "ADMIN" ? "ADMIN" : "USER";
-          token.banned = Boolean(account?.bannedAt);
-          token.founderNumber = account?.founderNumber ?? null;
-          token.kingdomUnlocked = Boolean(account?.kingdomUnlockedAt);
+          if (account) {
+            token.email = account.email;
+            token.name = account.displayName;
+            token.username = account.username;
+            token.picture = account.avatarUrl;
+            token.role = account.role === "ADMIN" ? "ADMIN" : "USER";
+            token.banned = Boolean(account.bannedAt);
+            token.founderNumber = account.founderNumber;
+            token.kingdomUnlocked = Boolean(account.kingdomUnlockedAt);
+          }
         } catch (error) {
           console.error("Unable to refresh account access state", error);
           token.role ??= token.email && isAdminEmail(token.email) ? "ADMIN" : "USER";
@@ -320,12 +231,40 @@ const nextAuth = NextAuth({
     async session({ session, token }) {
       if (session.user) {
         session.user.id = token.banned ? "" : token.sub ?? "";
+        session.user.name = token.name;
+        session.user.username = typeof token.username === "string" ? token.username : null;
+        session.user.email = token.email ?? "";
+        session.user.image = token.picture ?? null;
         session.user.role = token.role === "ADMIN" ? "ADMIN" : "USER";
         session.user.banned = Boolean(token.banned);
         session.user.founderNumber = typeof token.founderNumber === "number" ? token.founderNumber : null;
         session.user.kingdomUnlocked = Boolean(token.kingdomUnlocked);
       }
       return session;
+    }
+  },
+  events: {
+    async signIn({ user, account, profile }) {
+      if (isDemoMode || !user.id || !uuidPattern.test(user.id)) return;
+
+      const profileName = typeof profile?.name === "string" ? profile.name.trim() : "";
+      const profileImage =
+        account?.provider === "google" && typeof profile?.picture === "string"
+          ? profile.picture
+          : user.image;
+
+      try {
+        await prisma.user.update({
+          where: { id: user.id },
+          data: {
+            displayName: profileName.slice(0, 48) || user.name?.trim().slice(0, 48) || undefined,
+            avatarUrl: profileImage || undefined,
+            lastLoginAt: new Date()
+          }
+        });
+      } catch (error) {
+        console.error("Could not update the OAuth user profile", error);
+      }
     }
   }
 });
@@ -334,6 +273,7 @@ const demoSession = {
   user: {
     id: DEMO_USER.id,
     name: DEMO_USER.name,
+    username: DEMO_USER.name,
     email: DEMO_USER.email,
     image: null,
     role: "USER" as const,

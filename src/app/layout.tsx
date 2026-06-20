@@ -6,6 +6,7 @@ import { Providers } from "@/components/providers";
 import { FounderBadge } from "@/components/founder-badge";
 import { FounderSpots } from "@/components/founder-spots";
 import { KingdomBadge } from "@/components/kingdom-badge";
+import { UserMenu } from "@/components/auth/user-menu";
 import { Button } from "@/components/ui/button";
 import { getFounderAvailability } from "@/lib/founders";
 import { DEMO_USER } from "@/lib/demo";
@@ -49,7 +50,12 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
                     {isDemoMode ? (
                       <Button asChild size="sm" variant="outline"><Link href="/dashboard">{DEMO_USER.name}</Link></Button>
                     ) : (
-                      <Button asChild size="sm" variant="outline"><Link href="/api/auth/signout">Sign out</Link></Button>
+                      <UserMenu
+                        email={session.user.email}
+                        image={session.user.image}
+                        name={session.user.name}
+                        username={session.user.username}
+                      />
                     )}
                   </>
                 ) : (

@@ -14,7 +14,7 @@ type MarketplaceListing = {
   h3Index: string;
   imageUrl: string | null;
   message: string;
-  priceCents: bigint | number;
+  priceCents: number;
   owner: {
     displayName: string;
     avatarUrl: string | null;
@@ -29,12 +29,23 @@ export default async function MarketplacePage() {
   let listings: MarketplaceListing[] = [];
 
   try {
-    listings = await prisma.hex.findMany({
-      where: { status: "FOR_SALE" },
+    const activeListings = await prisma.marketplaceListing.findMany({
+      where: { active: true, status: "ACTIVE", hex: { status: "FOR_SALE" } },
       take: 100,
-      orderBy: { priceCents: "asc" },
-      include: { owner: { select: { displayName: true, avatarUrl: true, founderNumber: true, kingdomUnlockedAt: true } } }
+      orderBy: { price: "asc" },
+      include: {
+        hex: { select: { h3Index: true, imageUrl: true, message: true } },
+        seller: { select: { displayName: true, avatarUrl: true, founderNumber: true, kingdomUnlockedAt: true } }
+      }
     });
+    listings = activeListings.map((listing) => ({
+      id: listing.id,
+      h3Index: listing.hex.h3Index,
+      imageUrl: listing.hex.imageUrl,
+      message: listing.hex.message,
+      priceCents: Number(listing.price),
+      owner: listing.seller
+    }));
   } catch (error) {
     console.error("Marketplace listings could not be loaded:", error);
   }
@@ -49,24 +60,24 @@ export default async function MarketplacePage() {
         <Button asChild><Link href="/">Browse map</Link></Button>
       </div>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {listings.map((hex) => (
-          <Card key={hex.id}>
-            {hex.imageUrl ? <img src={hex.imageUrl} alt="" className="aspect-video w-full rounded-t-lg object-cover" /> : null}
+        {listings.map((listing) => (
+          <Card key={listing.id}>
+            {listing.imageUrl ? <img src={listing.imageUrl} alt="" className="aspect-video w-full rounded-t-lg object-cover" /> : null}
             <CardHeader>
-              <CardTitle className="break-all text-base">{hex.h3Index}</CardTitle>
+              <CardTitle className="break-all text-base">{listing.h3Index}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex items-center justify-between gap-3">
                 <span className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
-                  <span className="truncate">{hex.owner.displayName}</span>
-                  <FounderBadge founderNumber={hex.owner.founderNumber} compact />
-                  <KingdomBadge unlocked={Boolean(hex.owner.kingdomUnlockedAt)} compact />
+                  <span className="truncate">{listing.owner.displayName}</span>
+                  <FounderBadge founderNumber={listing.owner.founderNumber} compact />
+                  <KingdomBadge unlocked={Boolean(listing.owner.kingdomUnlockedAt)} compact />
                 </span>
-                <span className="font-semibold text-secondary">{money(Number(hex.priceCents))}</span>
+                <span className="font-semibold text-secondary">{money(listing.priceCents)}</span>
               </div>
               <p className="mt-2 text-xs text-muted-foreground">Platform fee: 5% from seller proceeds</p>
-              {hex.message ? <p className="mt-3 text-sm text-muted-foreground">{hex.message}</p> : null}
-              <BuyListingButton h3Index={hex.h3Index} priceCents={Number(hex.priceCents)} />
+              {listing.message ? <p className="mt-3 text-sm text-muted-foreground">{listing.message}</p> : null}
+              <BuyListingButton h3Index={listing.h3Index} priceCents={listing.priceCents} />
             </CardContent>
           </Card>
         ))}

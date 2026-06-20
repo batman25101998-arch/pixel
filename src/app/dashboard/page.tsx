@@ -40,7 +40,14 @@ export default async function DashboardPage() {
       <div className="space-y-6">
         <Card>
           <CardHeader><CardTitle className="flex flex-wrap items-center gap-2">Owner profile <FounderBadge founderNumber={user.founderNumber} compact /><KingdomBadge unlocked={Boolean(user.kingdomUnlockedAt)} compact /></CardTitle></CardHeader>
-          <CardContent className="space-y-4"><GamificationBadges badges={badges} /><ProfileForm user={user} /></CardContent>
+          <CardContent className="space-y-4">
+            <div className="text-sm">
+              <p className="font-medium">@{user.username}</p>
+              <p className="text-muted-foreground">{user.email}</p>
+            </div>
+            <GamificationBadges badges={badges} />
+            <ProfileForm user={user} />
+          </CardContent>
         </Card>
         <Card>
           <CardHeader><CardTitle>Combine territory</CardTitle></CardHeader>

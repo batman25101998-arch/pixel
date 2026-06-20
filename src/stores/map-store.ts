@@ -8,6 +8,7 @@ export type SelectedHex = {
     id: string;
     ownerName: string;
     ownerImage?: string | null;
+    avatarUrl?: string | null;
     ownerFounderNumber?: number | null;
     ownerKingdomUnlocked?: boolean;
     title?: string;

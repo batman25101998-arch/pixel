@@ -8,7 +8,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-export function SignInForm() {
+type SignInFormProps = {
+  googleEnabled: boolean;
+  appleEnabled: boolean;
+  callbackUrl: string;
+};
+
+export function SignInForm({ googleEnabled, appleEnabled, callbackUrl }: SignInFormProps) {
   const router = useRouter();
   const [mode, setMode] = useState<"signin" | "register">("signin");
   const [error, setError] = useState<string | null>(null);
@@ -17,7 +23,19 @@ export function SignInForm() {
   async function signInWithApple() {
     setBusy(true);
     setError(null);
-    await signIn("apple", { callbackUrl: "/dashboard" });
+    await signIn("apple", { redirectTo: callbackUrl });
+  }
+
+  async function signInWithGoogle() {
+    if (!googleEnabled) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await signIn("google", { redirectTo: callbackUrl });
+    } catch {
+      setBusy(false);
+      setError("Google sign-in could not be started.");
+    }
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -49,7 +67,7 @@ export function SignInForm() {
       setError("Email or password is incorrect.");
       return;
     }
-    router.push("/dashboard");
+    router.push(callbackUrl);
     router.refresh();
   }
 
@@ -60,15 +78,20 @@ export function SignInForm() {
       </CardHeader>
       <CardContent>
         <div className="grid gap-2">
-          <Button className="w-full" variant="outline" onClick={() => signIn("google", { callbackUrl: "/dashboard" })} disabled={busy}>
+          <Button className="w-full" variant="outline" onClick={signInWithGoogle} disabled={busy || !googleEnabled}>
             <span className="mr-2 flex h-5 w-5 items-center justify-center rounded-full border border-border text-xs font-bold">G</span>
             Continue with Google
           </Button>
-          <Button className="w-full" variant="outline" onClick={signInWithApple} disabled={busy}>
+          <Button className="w-full" variant="outline" onClick={signInWithApple} disabled={busy || !appleEnabled}>
             <span className="mr-2 flex h-5 w-5 items-center justify-center rounded-full border border-border text-xs font-bold">A</span>
             Continue with Apple
           </Button>
         </div>
+        {!googleEnabled ? (
+          <p className="mt-3 text-sm text-muted-foreground">
+            Google sign-in is unavailable until GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are configured.
+          </p>
+        ) : null}
 
         <div className="my-5 flex items-center gap-3">
           <div className="h-px flex-1 bg-border" />

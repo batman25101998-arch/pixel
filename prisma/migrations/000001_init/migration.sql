@@ -1,4 +1,3 @@
-CREATE EXTENSION IF NOT EXISTS postgis;
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE EXTENSION IF NOT EXISTS citext;
 
@@ -34,7 +33,6 @@ CREATE TABLE territories (
   color VARCHAR(16) NOT NULL DEFAULT '#22c55e',
   status territory_status NOT NULL DEFAULT 'ACTIVE',
   hex_count INTEGER NOT NULL DEFAULT 0,
-  bounds geometry(Polygon,4326),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -45,8 +43,8 @@ CREATE TABLE hexes (
   resolution SMALLINT NOT NULL DEFAULT 5,
   q INTEGER NOT NULL,
   r INTEGER NOT NULL,
-  latitude NUMERIC(9,6) NOT NULL,
-  longitude NUMERIC(9,6) NOT NULL,
+  latitude DOUBLE PRECISION,
+  longitude DOUBLE PRECISION,
   owner_id UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT ON UPDATE CASCADE,
   territory_id UUID REFERENCES territories(id) ON DELETE SET NULL ON UPDATE CASCADE,
   purchase_date TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -55,7 +53,6 @@ CREATE TABLE hexes (
   avatar_url TEXT,
   image_url TEXT,
   status hex_status NOT NULL DEFAULT 'OWNED',
-  geom geometry(Polygon,4326),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -120,14 +117,12 @@ CREATE INDEX users_display_name_idx ON users(display_name);
 
 CREATE INDEX territories_owner_id_status_idx ON territories(owner_id, status);
 CREATE INDEX territories_status_hex_count_idx ON territories(status, hex_count DESC);
-CREATE INDEX territories_bounds_gix ON territories USING GIST(bounds);
 
 CREATE INDEX hexes_owner_id_purchase_date_idx ON hexes(owner_id, purchase_date DESC);
 CREATE INDEX hexes_territory_id_idx ON hexes(territory_id);
 CREATE INDEX hexes_resolution_q_r_idx ON hexes(resolution, q, r);
 CREATE INDEX hexes_latitude_longitude_idx ON hexes(latitude, longitude);
 CREATE INDEX hexes_status_updated_at_idx ON hexes(status, updated_at);
-CREATE INDEX hexes_geom_gix ON hexes USING GIST(geom);
 
 CREATE UNIQUE INDEX marketplace_one_active_listing_per_hex
   ON marketplace(hex_id)

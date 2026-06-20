@@ -6,7 +6,7 @@ generator client {
 datasource db {
   provider   = "postgresql"
   url        = env("DATABASE_URL")
-  extensions = [postgis, pgcrypto, citext]
+  extensions = [pgcrypto, citext]
 }
 
 enum UserRole {
@@ -103,7 +103,7 @@ model User {
   avatarUrl         String?   @map("avatar_url")
   bio               String?   @db.VarChar(180)
   role              UserRole  @default(USER)
-  founderNumber     Int?      @unique @default(dbgenerated("next_founder_number()")) @map("founder_number")
+  founderNumber     Int?      @unique @map("founder_number")
   kingdomUnlockedAt DateTime? @map("kingdom_unlocked_at") @db.Timestamptz(6)
   bannedAt          DateTime? @map("banned_at") @db.Timestamptz(6)
   banReason         String?   @map("ban_reason") @db.VarChar(240)
@@ -134,13 +134,13 @@ model Account {
   type              String  @db.VarChar(32)
   provider          String  @db.VarChar(64)
   providerAccountId String  @map("provider_account_id") @db.VarChar(191)
-  refreshToken      String? @map("refresh_token")
-  accessToken       String? @map("access_token")
-  expiresAt         Int?    @map("expires_at")
-  tokenType         String? @map("token_type")
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
   scope             String?
-  idToken           String? @map("id_token")
-  sessionState      String? @map("session_state")
+  id_token          String?
+  session_state     String?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -150,27 +150,26 @@ model Account {
 }
 
 model Hex {
-  id           String                                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  h3Index      String                                 @unique @map("h3_index") @db.VarChar(32)
-  resolution   Int                                    @default(5) @db.SmallInt
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  h3Index      String    @unique @map("h3_index") @db.VarChar(32)
+  resolution   Int       @default(5) @db.SmallInt
   q            Int
   r            Int
-  latitude     Decimal                                @db.Decimal(9, 6)
-  longitude    Decimal                                @db.Decimal(9, 6)
-  countryCode  String?                                @map("country_code") @db.Char(2)
-  ownerId      String                                 @map("owner_id") @db.Uuid
-  territoryId  String?                                @map("territory_id") @db.Uuid
-  purchaseDate DateTime                               @default(now()) @map("purchase_date") @db.Timestamptz(6)
-  priceCents   BigInt                                 @default(100) @map("price_cents")
-  message      String                                 @default("") @db.VarChar(240)
-  title        String                                 @default("") @db.VarChar(80)
-  avatarUrl    String?                                @map("avatar_url")
-  imageUrl     String?                                @map("image_url")
+  latitude     Float?
+  longitude    Float?
+  countryCode  String?   @map("country_code") @db.Char(2)
+  ownerId      String    @map("owner_id") @db.Uuid
+  territoryId  String?   @map("territory_id") @db.Uuid
+  purchaseDate DateTime  @default(now()) @map("purchase_date") @db.Timestamptz(6)
+  priceCents   BigInt    @default(100) @map("price_cents")
+  message      String    @default("") @db.VarChar(240)
+  title        String    @default("") @db.VarChar(80)
+  avatarUrl    String?   @map("avatar_url")
+  imageUrl     String?   @map("image_url")
   link         String?
-  status       HexStatus                              @default(OWNED)
-  geom         Unsupported("geometry(Polygon,4326)")?
-  createdAt    DateTime                               @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt    DateTime                               @updatedAt @map("updated_at") @db.Timestamptz(6)
+  status       HexStatus @default(OWNED)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   owner        User                 @relation("HexOwner", fields: [ownerId], references: [id], onDelete: Restrict)
   territory    Territory?           @relation(fields: [territoryId], references: [id], onDelete: SetNull)
@@ -187,22 +186,21 @@ model Hex {
 }
 
 model Territory {
-  id             String                                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  ownerId        String                                 @map("owner_id") @db.Uuid
-  name           String                                 @db.VarChar(80)
-  slug           String                                 @unique @db.VarChar(96)
-  flag           String                                 @default("🏳️") @db.VarChar(16)
-  description    String                                 @default("") @db.VarChar(240)
-  bannerImageUrl String?                                @map("banner_image_url")
-  flagUrl        String?                                @map("flag_url")
-  color          String                                 @default("#22c55e") @db.VarChar(16)
-  level          TerritoryLevel                         @default(VILLAGE)
-  statistics     Json                                   @default("{}")
-  status         TerritoryStatus                        @default(ACTIVE)
-  hexCount       Int                                    @default(0) @map("hex_count")
-  bounds         Unsupported("geometry(Polygon,4326)")?
-  createdAt      DateTime                               @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt      DateTime                               @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id             String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ownerId        String          @map("owner_id") @db.Uuid
+  name           String          @db.VarChar(80)
+  slug           String          @unique @db.VarChar(96)
+  flag           String          @default("🏳️") @db.VarChar(16)
+  description    String          @default("") @db.VarChar(240)
+  bannerImageUrl String?         @map("banner_image_url")
+  flagUrl        String?         @map("flag_url")
+  color          String          @default("#22c55e") @db.VarChar(16)
+  level          TerritoryLevel  @default(VILLAGE)
+  statistics     Json            @default("{}")
+  status         TerritoryStatus @default(ACTIVE)
+  hexCount       Int             @default(0) @map("hex_count")
+  createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   owner User  @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   hexes Hex[]
@@ -312,15 +310,25 @@ model Session {
   sessionToken String   @unique @map("session_token")
   ipAddress    String?  @map("ip_address") @db.Inet
   userAgent    String?  @map("user_agent")
-  expiresAt    DateTime @map("expires_at") @db.Timestamptz(6)
+  expires      DateTime @map("expires_at") @db.Timestamptz(6)
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([userId, expiresAt])
-  @@index([expiresAt])
+  @@index([userId, expires])
+  @@index([expires])
   @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime @db.Timestamptz(6)
+
+  @@unique([identifier, token])
+  @@index([expires])
+  @@map("verification_tokens")
 }
 
 model AdminAuditLog {

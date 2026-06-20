@@ -257,7 +257,7 @@ function cellToPolygonFeature(cell: string, persistedHex?: PersistedHex, current
 
   const [lat, lng] = cellToLatLng(cell);
   const isLand = isApproximateLand(lat, lng);
-  const mockStatus = mockStatusForCell(cell, isLand);
+  const mockStatus = isDemoMode ? mockStatusForCell(cell, isLand) : "AVAILABLE";
   const status: MockHexStatus | string = persistedHex
     ? persistedHex.ownerId === currentUserId
       ? "MY_OWNED"
@@ -268,7 +268,9 @@ function cellToPolygonFeature(cell: string, persistedHex?: PersistedHex, current
         ownerId: persistedHex.ownerId,
       ownerName: persistedHex.owner.displayName
       }
-    : mockOwnerForStatus(mockStatus, cell);
+    : isDemoMode
+      ? mockOwnerForStatus(mockStatus, cell)
+      : { ownerId: null, ownerName: null };
 
   return {
     type: "Feature",

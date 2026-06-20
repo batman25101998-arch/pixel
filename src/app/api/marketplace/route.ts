@@ -6,12 +6,29 @@ import { isDemoMode } from "@/lib/env";
 
 export async function GET() {
   if (isDemoMode) return NextResponse.json({ listings: demoListings });
-  const hexes = await prisma.hex.findMany({
-    where: { status: "FOR_SALE" },
-    take: 100,
-    orderBy: { priceCents: "asc" },
-    include: { owner: { select: { id: true, displayName: true, avatarUrl: true, founderNumber: true, kingdomUnlockedAt: true } } }
-  });
+  try {
+    const listings = await prisma.marketplaceListing.findMany({
+      where: { active: true, status: "ACTIVE", hex: { status: "FOR_SALE" } },
+      take: 100,
+      orderBy: { price: "asc" },
+      include: {
+        hex: true,
+        seller: { select: { id: true, displayName: true, avatarUrl: true, founderNumber: true, kingdomUnlockedAt: true } }
+      }
+    });
 
-  return NextResponse.json({ listings: hexes.map(toFeature) });
+    return NextResponse.json({
+      listings: listings.map((listing) =>
+        toFeature({
+          ...listing.hex,
+          status: "FOR_SALE",
+          priceCents: listing.price,
+          owner: listing.seller
+        })
+      )
+    });
+  } catch (error) {
+    console.error("Marketplace listings could not be loaded:", error);
+    return NextResponse.json({ listings: [] });
+  }
 }

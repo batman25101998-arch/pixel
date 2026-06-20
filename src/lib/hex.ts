@@ -90,8 +90,8 @@ export function neighbors(h3Index: string) {
 export function toFeature(hex: {
   id: string;
   h3Index: string;
-  latitude: number | { toString(): string };
-  longitude: number | { toString(): string };
+  latitude: number | { toString(): string } | null;
+  longitude: number | { toString(): string } | null;
   title: string;
   message: string;
   avatarUrl: string | null;
@@ -101,8 +101,9 @@ export function toFeature(hex: {
   priceCents: number | bigint;
   owner: { id: string; displayName: string; avatarUrl: string | null; founderNumber?: number | null; kingdomUnlockedAt?: Date | null } | null;
 }): HexFeature {
-  const latitude = Number(hex.latitude);
-  const longitude = Number(hex.longitude);
+  const center = centerForCell(hex.h3Index);
+  const latitude = hex.latitude == null ? center.latitude : Number(hex.latitude);
+  const longitude = hex.longitude == null ? center.longitude : Number(hex.longitude);
   return {
     type: "Feature",
     id: hex.id,
@@ -151,9 +152,4 @@ export function virtualHexForCell(h3Index: string, priceCents = 100): EarthHex {
 
 export function virtualFeatureForCell(h3Index: string, priceCents = 100) {
   return toFeature(virtualHexForCell(h3Index, priceCents));
-}
-
-export function geoJsonPolygonSql(h3Index: string) {
-  const ring = polygonForCell(h3Index);
-  return JSON.stringify({ type: "Polygon", coordinates: [ring] });
 }

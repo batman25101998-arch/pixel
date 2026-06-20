@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { gridDisk } from "h3-js";
+import { useSession } from "next-auth/react";
 import { Award, CheckCircle2, Loader2, MapPin, ShoppingCart, Tag, X } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { FounderBadge } from "@/components/founder-badge";
@@ -15,6 +16,7 @@ import { money } from "@/lib/utils";
 import { DEMO_USER, isClientDemoMode } from "@/lib/demo";
 import { buyDemoHex, getDemoOwnedHexes, updateDemoHexMetadata } from "@/lib/demo-storage";
 import { getUserBadges } from "@/lib/gamification";
+import { startGoogleSignIn } from "@/lib/client-auth";
 import { useMapStore } from "@/stores/map-store";
 
 type Certificate = {
@@ -24,6 +26,7 @@ type Certificate = {
   longitude: number;
   ownerName: string;
   ownerImage?: string | null;
+  avatarUrl?: string | null;
   ownerFounderNumber?: number | null;
   ownerKingdomUnlocked?: boolean;
   adjacentOwnedCount?: number;
@@ -103,6 +106,7 @@ function MergeAnimation({ adjacentCount, onComplete }: { adjacentCount: number; 
 }
 
 export function PurchasePanel() {
+  const { status: authenticationStatus } = useSession();
   const selectedHex = useMapStore((state) => state.selectedHex);
   const setSelectedHex = useMapStore((state) => state.setSelectedHex);
   const refresh = useMapStore((state) => state.refresh);
@@ -119,6 +123,7 @@ export function PurchasePanel() {
 
   const purchased = selectedHex?.purchased;
   const status = purchased?.status ?? "AVAILABLE";
+  const isOwnHex = status === "MY_OWNED";
   const price = purchased?.priceCents ?? 100;
   const coordinates = selectedHex ? coordinateLabel(selectedHex.lat, selectedHex.lng) : "";
   const demoOwnedHexes = isClientDemoMode ? getDemoOwnedHexes().filter((hex) => hex.ownerId === DEMO_USER.id) : [];
@@ -146,12 +151,12 @@ export function PurchasePanel() {
     if (!selectedHex) return;
     setError(null);
     const saved = isClientDemoMode ? getDemoOwnedHexes().find((hex) => hex.h3Index === selectedHex.h3Index) : null;
-    setTitle(saved?.title ?? "");
-    setMessage(saved?.message ?? "");
-    setAvatarUrl(saved?.avatarUrl ?? "");
-    setImageUrl(saved?.imageUrl ?? "");
-    setExternalLink(saved?.externalLink ?? "");
-  }, [selectedHex?.h3Index]);
+    setTitle(saved?.title ?? selectedHex.purchased?.title ?? "");
+    setMessage(saved?.message ?? selectedHex.purchased?.message ?? "");
+    setAvatarUrl(saved?.avatarUrl ?? selectedHex.purchased?.avatarUrl ?? "");
+    setImageUrl(saved?.imageUrl ?? selectedHex.purchased?.imageUrl ?? "");
+    setExternalLink(saved?.externalLink ?? selectedHex.purchased?.externalLink ?? "");
+  }, [selectedHex]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -180,8 +185,9 @@ export function PurchasePanel() {
             lat: data.certificate.latitude,
             purchased: {
               id: data.certificate.id,
-              ownerName: data.certificate.ownerName,
-              ownerImage: data.certificate.ownerImage,
+               ownerName: data.certificate.ownerName,
+               ownerImage: data.certificate.ownerImage,
+               avatarUrl: data.certificate.avatarUrl,
               ownerFounderNumber: data.certificate.ownerFounderNumber,
               ownerKingdomUnlocked: data.certificate.ownerKingdomUnlocked,
               message: data.certificate.message,
@@ -231,6 +237,16 @@ export function PurchasePanel() {
     setBusy(true);
     setError(null);
 
+    if (!isClientDemoMode && authenticationStatus !== "authenticated") {
+      try {
+        await startGoogleSignIn(`${window.location.pathname}${window.location.search}`);
+      } catch {
+        setBusy(false);
+        setError("Sign in with Google to purchase this hex.");
+      }
+      return;
+    }
+
     if (isClientDemoMode) {
       const purchaseDate = new Date().toISOString();
       const existingOwned = getDemoOwnedHexes();
@@ -279,6 +295,7 @@ export function PurchasePanel() {
           id,
           ownerName: DEMO_USER.name,
               ownerImage: avatarUrl || null,
+              avatarUrl: avatarUrl || null,
               title,
               message,
               imageUrl: imageUrl || null,
@@ -314,30 +331,55 @@ export function PurchasePanel() {
     window.location.href = data.checkoutUrl;
   }
 
-  function saveMetadata() {
-    if (!selectedHex || !isClientDemoMode) return;
-    const updated = updateDemoHexMetadata(selectedHex.h3Index, {
-      message,
-      title,
-      avatarUrl: avatarUrl || null,
-      imageUrl: imageUrl || null,
-      externalLink: externalLink || null
-    });
-    setSelectedHex({
-      ...selectedHex,
-      purchased: {
-        id: updated.id,
-        ownerName: updated.ownerName,
-        ownerImage: updated.avatarUrl,
-        title: updated.title,
-        message: updated.message,
-        imageUrl: updated.imageUrl,
-        externalLink: updated.externalLink,
-        status: "MY_OWNED",
-        priceCents: updated.priceCents
+  async function saveMetadata() {
+    if (!selectedHex?.purchased || !isOwnHex) return;
+    setBusy(true);
+    setError(null);
+    try {
+      if (isClientDemoMode) {
+        updateDemoHexMetadata(selectedHex.h3Index, {
+          message,
+          title,
+          avatarUrl: avatarUrl || null,
+          imageUrl: imageUrl || null,
+          externalLink: externalLink || null
+        });
+      } else {
+        const response = await fetch(`/api/hexes/${selectedHex.purchased.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            message,
+            title,
+            avatarUrl: avatarUrl || null,
+            imageUrl: imageUrl || null,
+            externalLink: externalLink || null
+          })
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(typeof data.error === "string" ? data.error : "Hex details could not be saved.");
+        }
       }
-    });
-    refresh();
+
+      setSelectedHex({
+        ...selectedHex,
+        purchased: {
+          ...selectedHex.purchased,
+          ownerImage: avatarUrl || null,
+          avatarUrl: avatarUrl || null,
+          title,
+          message,
+          imageUrl: imageUrl || null,
+          externalLink: externalLink || null
+        }
+      });
+      refresh();
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Hex details could not be saved.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -422,7 +464,7 @@ export function PurchasePanel() {
                 {purchased.message ? <p className="mt-3 text-sm text-muted-foreground">{purchased.message}</p> : null}
                 {purchased.imageUrl ? <img src={purchased.imageUrl} alt="" className="mt-3 aspect-video w-full rounded-md object-cover" /> : null}
                 {purchased.externalLink ? <a href={purchased.externalLink} target="_blank" rel="noreferrer" className="text-sm font-medium text-primary underline">Visit link</a> : null}
-                {isClientDemoMode && status === "MY_OWNED" ? (
+                {isOwnHex ? (
                   <div className="space-y-3 border-t border-border pt-3">
                     <div className="space-y-1.5"><Label htmlFor="owned-title">Title</Label><Input id="owned-title" maxLength={80} value={title} onChange={(event) => setTitle(event.target.value)} /></div>
                     <div className="space-y-1.5"><Label htmlFor="owned-message">Message</Label><Textarea id="owned-message" maxLength={240} value={message} onChange={(event) => setMessage(event.target.value)} /></div>
@@ -433,7 +475,10 @@ export function PurchasePanel() {
                     <div className="space-y-1.5"><Label htmlFor="owned-link">External link</Label><Input id="owned-link" type="url" value={externalLink} onChange={(event) => setExternalLink(event.target.value)} /></div>
                     {avatarUrl ? <img src={avatarUrl} alt="Avatar preview" className="h-12 w-12 rounded-full object-cover" /> : null}
                     {imageUrl ? <img src={imageUrl} alt="Image preview" className="aspect-video w-full rounded-md object-cover" /> : null}
-                    <Button type="button" variant="outline" className="w-full" onClick={saveMetadata}>Save demo details</Button>
+                    <Button type="button" variant="outline" className="w-full" disabled={busy} onClick={saveMetadata}>
+                      {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                      Save hex details
+                    </Button>
                   </div>
                 ) : null}
               </div>

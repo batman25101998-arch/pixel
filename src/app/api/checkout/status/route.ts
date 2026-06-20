@@ -83,12 +83,13 @@ export async function GET(request: Request) {
     certificate:
       payment.status === "SUCCEEDED" && hex
         ? {
-            id: payment.transaction?.id ?? payment.id,
+            id: hex.id,
             h3Index: hex.h3Index,
             latitude: Number(hex.latitude),
             longitude: Number(hex.longitude),
             ownerName: hex.owner.displayName,
             ownerImage: hex.avatarUrl ?? hex.owner.avatarUrl,
+            avatarUrl: hex.avatarUrl,
             ownerFounderNumber: hex.owner.founderNumber,
             ownerKingdomUnlocked: Boolean(hex.owner.kingdomUnlockedAt),
             adjacentOwnedCount,
