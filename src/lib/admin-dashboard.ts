@@ -157,7 +157,7 @@ export async function getAdminDashboardData(query = ""): Promise<AdminDashboardD
       prisma.transaction.aggregate({
         where: { status: "COMPLETED" },
         _count: true,
-        _sum: { amountCents: true, platformFeeCents: true }
+        _sum: { amount: true, platformFeeCents: true }
       }),
       prisma.payment.aggregate({ where: { status: "REFUNDED" }, _sum: { amountCents: true } }),
       prisma.user.findMany({
@@ -247,7 +247,7 @@ export async function getAdminDashboardData(query = ""): Promise<AdminDashboardD
         hexes: hexCount,
         territories: territoryCount,
         transactions: transactionAggregate._count,
-        grossRevenueCents: Number(transactionAggregate._sum.amountCents ?? 0),
+        grossRevenueCents: Number(transactionAggregate._sum.amount ?? 0),
         platformFeesCents: Number(transactionAggregate._sum.platformFeeCents ?? 0),
         refundedCents: Number(refundedAggregate._sum.amountCents ?? 0)
       },
@@ -313,7 +313,7 @@ export async function getAdminDashboardData(query = ""): Promise<AdminDashboardD
         id: transaction.id,
         type: transaction.type,
         status: transaction.status,
-        amountCents: Number(transaction.amountCents),
+        amountCents: Number(transaction.amount),
         buyerName: transaction.buyer.displayName,
         buyerEmail: transaction.buyer.email,
         buyerFounderNumber: transaction.buyer.founderNumber,

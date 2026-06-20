@@ -216,7 +216,7 @@ export async function getGlobalRankings(limit = 10): Promise<GlobalRankings> {
         buyerFounderNumber: purchase.buyer.founderNumber,
         buyerKingdomUnlocked: Boolean(purchase.buyer.kingdomUnlockedAt),
         h3Index: purchase.hex.h3Index,
-        amountCents: Number(purchase.amountCents),
+        amountCents: Number(purchase.amount),
         purchasedAt: (purchase.completedAt ?? purchase.createdAt).toISOString(),
         type: purchase.type
       }))

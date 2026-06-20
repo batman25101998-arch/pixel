@@ -32,7 +32,7 @@ type PersistedHex = {
   title: string;
   avatarUrl: string | null;
   imageUrl: string | null;
-  externalLink: string | null;
+  link: string | null;
   priceCents: bigint;
   purchaseDate: Date;
 };
@@ -296,7 +296,7 @@ function cellToPolygonFeature(cell: string, persistedHex?: PersistedHex, current
       message: persistedHex?.message ?? "",
       title: persistedHex?.title ?? "",
       imageUrl: persistedHex?.imageUrl ?? null,
-      externalLink: persistedHex?.externalLink ?? null,
+      externalLink: persistedHex?.link ?? null,
       purchaseDate: persistedHex?.purchaseDate.toISOString() ?? null,
     },
   };

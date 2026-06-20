@@ -36,7 +36,7 @@ export type EarthHex = {
   title: string;
   avatarUrl: string | null;
   imageUrl: string | null;
-  externalLink: string | null;
+  link: string | null;
 };
 
 export function cellForLngLat(lng: number, lat: number, resolution = env.HEX_RESOLUTION) {
@@ -96,7 +96,7 @@ export function toFeature(hex: {
   message: string;
   avatarUrl: string | null;
   imageUrl: string | null;
-  externalLink: string | null;
+  link: string | null;
   status: string;
   priceCents: number | bigint;
   owner: { id: string; displayName: string; avatarUrl: string | null; founderNumber?: number | null; kingdomUnlockedAt?: Date | null } | null;
@@ -123,7 +123,7 @@ export function toFeature(hex: {
       message: hex.message,
       title: hex.title,
       imageUrl: hex.imageUrl,
-      externalLink: hex.externalLink,
+      externalLink: hex.link,
       status: hex.status,
       priceCents: Number(hex.priceCents)
     }
@@ -145,7 +145,7 @@ export function virtualHexForCell(h3Index: string, priceCents = 100): EarthHex {
     message: "",
     avatarUrl: null,
     imageUrl: null,
-    externalLink: null
+    link: null
   };
 }
 

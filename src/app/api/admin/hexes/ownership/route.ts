@@ -37,9 +37,9 @@ export async function POST(request: Request) {
   if (owner.id === hex.ownerId) return NextResponse.json({ error: "That user already owns this hex." }, { status: 409 });
 
   await prisma.$transaction(async (transaction) => {
-    await transaction.marketplace.updateMany({
-      where: { hexId: hex.id, status: "ACTIVE" },
-      data: { status: "CANCELED" }
+    await transaction.marketplaceListing.updateMany({
+      where: { hexId: hex.id, status: "ACTIVE", active: true },
+      data: { status: "CANCELED", active: false }
     });
     await transaction.hex.update({
       where: { id: hex.id },
@@ -74,7 +74,7 @@ export async function POST(request: Request) {
         sellerId: hex.ownerId,
         type: "ADMIN_ADJUSTMENT",
         status: "COMPLETED",
-        amountCents: 0,
+        amount: 0,
         platformFeeCents: 0,
         metadata: { adminId: session.user.id, reason },
         completedAt: new Date()

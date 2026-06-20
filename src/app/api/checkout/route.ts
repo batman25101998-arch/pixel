@@ -21,7 +21,7 @@ export async function POST(request: Request) {
     where: { h3Index: parsed.data.h3Index },
     include: {
       listings: {
-        where: { status: "ACTIVE" },
+        where: { status: "ACTIVE", active: true },
         orderBy: { createdAt: "desc" },
         take: 1
       }
@@ -38,7 +38,7 @@ export async function POST(request: Request) {
   }
 
   const activeListing = existing?.listings[0] ?? null;
-  const amountCents = activeListing ? Number(activeListing.priceCents) : 100;
+  const amountCents = activeListing ? Number(activeListing.price) : 100;
   const payment = await prisma.payment.create({
     data: {
       userId: session.user.id,

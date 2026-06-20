@@ -2,6 +2,13 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { isDemoMode } from "@/lib/env";
+
+function territoryLevel(hexCount: number) {
+  if (hexCount >= 5000) return "EMPIRE" as const;
+  if (hexCount >= 1000) return "KINGDOM" as const;
+  if (hexCount >= 100) return "CITY" as const;
+  return "VILLAGE" as const;
+}
 import {
   areContiguous,
   CUSTOM_TERRITORY_HEX_REQUIREMENT,
@@ -42,7 +49,7 @@ export async function GET() {
             color: territory.color,
             description: territory.description,
             bannerImageUrl: territory.bannerImageUrl,
-            flagImageUrl: territory.flagImageUrl,
+            flagUrl: territory.flagUrl,
             ownerName: territory.owner.displayName,
             ownerFounderNumber: territory.owner.founderNumber,
             ownerKingdomUnlocked: Boolean(territory.owner.kingdomUnlockedAt),
@@ -105,8 +112,9 @@ export async function POST(request: Request) {
           flag: parsed.data.flag,
           description: parsed.data.description,
           bannerImageUrl: parsed.data.bannerImageUrl,
-          flagImageUrl: parsed.data.flagImageUrl,
+          flagUrl: parsed.data.flagImageUrl,
           color: parsed.data.color,
+          level: territoryLevel(hexes.length),
           statistics,
           hexCount: hexes.length
         }

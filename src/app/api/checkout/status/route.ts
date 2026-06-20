@@ -95,7 +95,7 @@ export async function GET(request: Request) {
             title: hex.title,
             message: hex.message,
             imageUrl: hex.imageUrl,
-            externalLink: hex.externalLink,
+            externalLink: hex.link,
             priceCents: Number(hex.priceCents),
             purchaseDate: hex.purchaseDate.toISOString()
           }

@@ -35,6 +35,27 @@ enum TerritoryStatus {
   @@map("territory_status")
 }
 
+enum TerritoryLevel {
+  VILLAGE
+  CITY
+  KINGDOM
+  EMPIRE
+
+  @@map("territory_level")
+}
+
+enum BadgeType {
+  FOUNDER
+  FIRST_HEX
+  VILLAGE_OWNER
+  CITY_BUILDER
+  KINGDOM_FOUNDER
+  COLLECTOR_100
+  MARKETPLACE_SELLER
+
+  @@map("badge_type")
+}
+
 enum MarketplaceStatus {
   ACTIVE
   SOLD
@@ -74,32 +95,33 @@ enum PaymentStatus {
 }
 
 model User {
-  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  email         String    @unique @db.Citext
-  username      String    @unique @db.Citext
-  displayName   String    @map("display_name") @db.VarChar(48)
-  passwordHash  String?   @map("password_hash")
-  avatarUrl     String?   @map("avatar_url")
-  bio           String?   @db.VarChar(180)
-  role          UserRole  @default(USER)
-  founderNumber Int?      @unique @default(dbgenerated("next_founder_number()")) @map("founder_number")
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email             String    @unique @db.Citext
+  username          String    @unique @db.Citext
+  displayName       String    @map("display_name") @db.VarChar(48)
+  passwordHash      String?   @map("password_hash")
+  avatarUrl         String?   @map("avatar_url")
+  bio               String?   @db.VarChar(180)
+  role              UserRole  @default(USER)
+  founderNumber     Int?      @unique @default(dbgenerated("next_founder_number()")) @map("founder_number")
   kingdomUnlockedAt DateTime? @map("kingdom_unlocked_at") @db.Timestamptz(6)
-  bannedAt      DateTime? @map("banned_at") @db.Timestamptz(6)
-  banReason     String?   @map("ban_reason") @db.VarChar(240)
-  emailVerified DateTime? @map("email_verified") @db.Timestamptz(6)
-  lastLoginAt   DateTime? @map("last_login_at") @db.Timestamptz(6)
-  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  bannedAt          DateTime? @map("banned_at") @db.Timestamptz(6)
+  banReason         String?   @map("ban_reason") @db.VarChar(240)
+  emailVerified     DateTime? @map("email_verified") @db.Timestamptz(6)
+  lastLoginAt       DateTime? @map("last_login_at") @db.Timestamptz(6)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  ownedHexes     Hex[]         @relation("HexOwner")
-  territories    Territory[]
-  sessions       Session[]
-  accounts       Account[]
-  buyerDeals     Transaction[] @relation("TransactionBuyer")
-  sellerDeals    Transaction[] @relation("TransactionSeller")
-  payments       Payment[]
-  listings       Marketplace[]
-  adminActions   AdminAuditLog[] @relation("AdminActor")
+  ownedHexes   Hex[]                @relation("HexOwner")
+  territories  Territory[]
+  sessions     Session[]
+  accounts     Account[]
+  buyerDeals   Transaction[]        @relation("TransactionBuyer")
+  sellerDeals  Transaction[]        @relation("TransactionSeller")
+  payments     Payment[]
+  listings     MarketplaceListing[]
+  badges       Badge[]
+  adminActions AdminAuditLog[]      @relation("AdminActor")
 
   @@index([role, createdAt])
   @@index([displayName])
@@ -128,31 +150,31 @@ model Account {
 }
 
 model Hex {
-  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  h3Index        String    @unique @map("h3_index") @db.VarChar(32)
-  resolution     Int       @default(5) @db.SmallInt
-  q              Int
-  r              Int
-  latitude       Decimal   @db.Decimal(9, 6)
-  longitude      Decimal   @db.Decimal(9, 6)
-  countryCode    String?   @map("country_code") @db.Char(2)
-  ownerId        String    @map("owner_id") @db.Uuid
-  territoryId    String?   @map("territory_id") @db.Uuid
-  purchaseDate   DateTime  @default(now()) @map("purchase_date") @db.Timestamptz(6)
-  priceCents     BigInt    @default(100) @map("price_cents")
-  message        String    @default("") @db.VarChar(240)
-  title          String    @default("") @db.VarChar(80)
-  avatarUrl      String?   @map("avatar_url")
-  imageUrl       String?   @map("image_url")
-  externalLink   String?   @map("external_link")
-  status         HexStatus @default(OWNED)
-  geom           Unsupported("geometry(Polygon,4326)")?
-  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id           String                                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  h3Index      String                                 @unique @map("h3_index") @db.VarChar(32)
+  resolution   Int                                    @default(5) @db.SmallInt
+  q            Int
+  r            Int
+  latitude     Decimal                                @db.Decimal(9, 6)
+  longitude    Decimal                                @db.Decimal(9, 6)
+  countryCode  String?                                @map("country_code") @db.Char(2)
+  ownerId      String                                 @map("owner_id") @db.Uuid
+  territoryId  String?                                @map("territory_id") @db.Uuid
+  purchaseDate DateTime                               @default(now()) @map("purchase_date") @db.Timestamptz(6)
+  priceCents   BigInt                                 @default(100) @map("price_cents")
+  message      String                                 @default("") @db.VarChar(240)
+  title        String                                 @default("") @db.VarChar(80)
+  avatarUrl    String?                                @map("avatar_url")
+  imageUrl     String?                                @map("image_url")
+  link         String?
+  status       HexStatus                              @default(OWNED)
+  geom         Unsupported("geometry(Polygon,4326)")?
+  createdAt    DateTime                               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime                               @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  owner        User          @relation("HexOwner", fields: [ownerId], references: [id], onDelete: Restrict)
-  territory    Territory?    @relation(fields: [territoryId], references: [id], onDelete: SetNull)
-  listings     Marketplace[]
+  owner        User                 @relation("HexOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  territory    Territory?           @relation(fields: [territoryId], references: [id], onDelete: SetNull)
+  listings     MarketplaceListing[]
   transactions Transaction[]
 
   @@index([ownerId, purchaseDate(sort: Desc)])
@@ -165,51 +187,54 @@ model Hex {
 }
 
 model Territory {
-  id          String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  ownerId     String          @map("owner_id") @db.Uuid
-  name        String          @db.VarChar(80)
-  slug        String          @unique @db.VarChar(96)
-  flag        String          @default("🏳️") @db.VarChar(16)
-  description String          @default("") @db.VarChar(240)
-  bannerImageUrl String?       @map("banner_image_url")
-  flagImageUrl   String?       @map("flag_image_url")
-  color       String          @default("#22c55e") @db.VarChar(16)
-  statistics  Json            @default("{}")
-  status      TerritoryStatus @default(ACTIVE)
-  hexCount    Int             @default(0) @map("hex_count")
-  bounds      Unsupported("geometry(Polygon,4326)")?
-  createdAt   DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id             String                                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ownerId        String                                 @map("owner_id") @db.Uuid
+  name           String                                 @db.VarChar(80)
+  slug           String                                 @unique @db.VarChar(96)
+  flag           String                                 @default("🏳️") @db.VarChar(16)
+  description    String                                 @default("") @db.VarChar(240)
+  bannerImageUrl String?                                @map("banner_image_url")
+  flagUrl        String?                                @map("flag_url")
+  color          String                                 @default("#22c55e") @db.VarChar(16)
+  level          TerritoryLevel                         @default(VILLAGE)
+  statistics     Json                                   @default("{}")
+  status         TerritoryStatus                        @default(ACTIVE)
+  hexCount       Int                                    @default(0) @map("hex_count")
+  bounds         Unsupported("geometry(Polygon,4326)")?
+  createdAt      DateTime                               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime                               @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   owner User  @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  hexes  Hex[]
+  hexes Hex[]
 
   @@index([ownerId, status])
+  @@index([level, hexCount(sort: Desc)])
   @@index([status, hexCount(sort: Desc)])
   @@map("territories")
 }
 
 model Transaction {
-  id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  hexId           String            @map("hex_id") @db.Uuid
-  buyerId         String            @map("buyer_id") @db.Uuid
-  sellerId        String?           @map("seller_id") @db.Uuid
-  marketplaceId   String?           @map("marketplace_id") @db.Uuid
-  paymentId       String?           @unique @map("payment_id") @db.Uuid
-  type            TransactionType
-  status          TransactionStatus @default(PENDING)
-  amountCents     BigInt            @map("amount_cents")
-  platformFeeCents BigInt           @default(0) @map("platform_fee_cents")
-  currency        String            @default("usd") @db.Char(3)
-  metadata        Json              @default("{}")
-  createdAt       DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
-  completedAt     DateTime?         @map("completed_at") @db.Timestamptz(6)
+  id               String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  hexId            String            @map("hex_id") @db.Uuid
+  buyerId          String            @map("buyer_id") @db.Uuid
+  sellerId         String?           @map("seller_id") @db.Uuid
+  marketplaceId    String?           @map("marketplace_id") @db.Uuid
+  paymentId        String?           @unique @map("payment_id") @db.Uuid
+  type             TransactionType
+  status           TransactionStatus @default(PENDING)
+  /// Transaction amount in minor currency units (for example, cents).
+  amount           BigInt
+  platformFeeCents BigInt            @default(0) @map("platform_fee_cents")
+  currency         String            @default("usd") @db.Char(3)
+  metadata         Json              @default("{}")
+  createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  completedAt      DateTime?         @map("completed_at") @db.Timestamptz(6)
 
-  hex         Hex          @relation(fields: [hexId], references: [id], onDelete: Restrict)
-  buyer       User         @relation("TransactionBuyer", fields: [buyerId], references: [id], onDelete: Restrict)
-  seller      User?        @relation("TransactionSeller", fields: [sellerId], references: [id], onDelete: Restrict)
-  marketplace Marketplace? @relation(fields: [marketplaceId], references: [id], onDelete: SetNull)
-  payment     Payment?     @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  hex         Hex                 @relation(fields: [hexId], references: [id], onDelete: Restrict)
+  buyer       User                @relation("TransactionBuyer", fields: [buyerId], references: [id], onDelete: Restrict)
+  seller      User?               @relation("TransactionSeller", fields: [sellerId], references: [id], onDelete: Restrict)
+  marketplace MarketplaceListing? @relation(fields: [marketplaceId], references: [id], onDelete: SetNull)
+  payment     Payment?            @relation(fields: [paymentId], references: [id], onDelete: SetNull)
 
   @@index([hexId, createdAt(sort: Desc)])
   @@index([buyerId, createdAt(sort: Desc)])
@@ -219,25 +244,42 @@ model Transaction {
   @@map("transactions")
 }
 
-model Marketplace {
-  id            String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  hexId         String            @map("hex_id") @db.Uuid
-  sellerId      String            @map("seller_id") @db.Uuid
-  status        MarketplaceStatus @default(ACTIVE)
-  priceCents    BigInt            @map("price_cents")
-  currency      String            @default("usd") @db.Char(3)
-  expiresAt     DateTime?         @map("expires_at") @db.Timestamptz(6)
-  createdAt     DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt     DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+model MarketplaceListing {
+  id        String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  hexId     String            @map("hex_id") @db.Uuid
+  sellerId  String            @map("seller_id") @db.Uuid
+  status    MarketplaceStatus @default(ACTIVE)
+  /// Listing price in minor currency units (for example, cents).
+  price     BigInt
+  active    Boolean           @default(true)
+  currency  String            @default("usd") @db.Char(3)
+  expiresAt DateTime?         @map("expires_at") @db.Timestamptz(6)
+  createdAt DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   hex          Hex           @relation(fields: [hexId], references: [id], onDelete: Cascade)
   seller       User          @relation(fields: [sellerId], references: [id], onDelete: Cascade)
   transactions Transaction[]
 
-  @@index([status, priceCents])
+  @@index([active, price])
+  @@index([status, price])
   @@index([sellerId, status, createdAt(sort: Desc)])
   @@index([createdAt(sort: Desc)])
   @@map("marketplace")
+}
+
+model Badge {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  type      BadgeType
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, type])
+  @@index([type, createdAt(sort: Desc)])
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("badges")
 }
 
 model Payment {

@@ -50,7 +50,7 @@ export async function POST(request: Request) {
         where: { h3Index: metadata.h3Index! },
         include: {
           listings: {
-            where: { status: "ACTIVE" },
+            where: { status: "ACTIVE", active: true },
             orderBy: { createdAt: "desc" },
             take: 1
           }
@@ -66,7 +66,7 @@ export async function POST(request: Request) {
       }
 
       const activeListing = current?.listings[0] ?? null;
-      if (current && (!activeListing || activeListing.id !== metadata.marketplaceId || Number(activeListing.priceCents) !== Number(payment.amountCents))) {
+      if (current && (!activeListing || activeListing.id !== metadata.marketplaceId || Number(activeListing.price) !== Number(payment.amountCents))) {
         await tx.payment.update({ where: { id: payment.id }, data: { status: "CANCELED", rawEvent: event as object } });
         return;
       }
@@ -82,7 +82,7 @@ export async function POST(request: Request) {
               message: metadata.message ?? current.message,
               avatarUrl: metadata.avatarUrl ?? current.avatarUrl,
               imageUrl: metadata.imageUrl ?? current.imageUrl,
-              externalLink: metadata.externalLink ?? current.externalLink,
+              link: metadata.externalLink ?? current.link,
               status: "OWNED",
               priceCents: payment.amountCents
             }
@@ -101,7 +101,7 @@ export async function POST(request: Request) {
               message: metadata.message ?? "",
               avatarUrl: metadata.avatarUrl,
               imageUrl: metadata.imageUrl,
-              externalLink: metadata.externalLink
+              link: metadata.externalLink
             }
           });
 
@@ -114,9 +114,9 @@ export async function POST(request: Request) {
       }
 
       if (activeListing) {
-        await tx.marketplace.update({
+        await tx.marketplaceListing.update({
           where: { id: activeListing.id },
-          data: { status: "SOLD" }
+          data: { status: "SOLD", active: false }
         });
       }
 
@@ -145,7 +145,7 @@ export async function POST(request: Request) {
           paymentId: payment.id,
           type: current ? "RESALE_PURCHASE" : "PRIMARY_PURCHASE",
           status: "COMPLETED",
-          amountCents: payment.amountCents,
+          amount: payment.amountCents,
           platformFeeCents,
           currency: payment.currency,
           metadata: {

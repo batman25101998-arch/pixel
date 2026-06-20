@@ -34,31 +34,33 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const nextStatus = parsed.data.status;
     const nextPriceCents = parsed.data.priceCents;
 
+    const { externalLink, ...hexData } = parsed.data;
     const saved = await tx.hex.update({
       where: { id },
-      data: parsed.data,
+      data: { ...hexData, link: externalLink },
       include: { owner: { select: { id: true, displayName: true, avatarUrl: true, founderNumber: true, kingdomUnlockedAt: true } } }
     });
 
     if (nextStatus === "FOR_SALE") {
-      await tx.marketplace.updateMany({
-        where: { hexId: id, status: "ACTIVE" },
-        data: { status: "CANCELED" }
+      await tx.marketplaceListing.updateMany({
+        where: { hexId: id, status: "ACTIVE", active: true },
+        data: { status: "CANCELED", active: false }
       });
-      await tx.marketplace.create({
+      await tx.marketplaceListing.create({
         data: {
           hexId: id,
           sellerId: hex.ownerId,
-          priceCents: nextPriceCents ?? Number(saved.priceCents),
+          price: nextPriceCents ?? Number(saved.priceCents),
+          active: true,
           status: "ACTIVE"
         }
       });
     }
 
     if (nextStatus === "OWNED" && hex.status === "FOR_SALE") {
-      await tx.marketplace.updateMany({
-        where: { hexId: id, status: "ACTIVE" },
-        data: { status: "CANCELED" }
+      await tx.marketplaceListing.updateMany({
+        where: { hexId: id, status: "ACTIVE", active: true },
+        data: { status: "CANCELED", active: false }
       });
     }
 

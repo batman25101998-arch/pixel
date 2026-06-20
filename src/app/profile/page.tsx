@@ -67,7 +67,7 @@ export default async function ProfilePage() {
     }
   });
 
-  const totalSpent = user.buyerDeals.reduce((sum, transaction) => sum + Number(transaction.amountCents), 0);
+  const totalSpent = user.buyerDeals.reduce((sum, transaction) => sum + Number(transaction.amount), 0);
   const estimatedValue = allOwnedHexes.reduce((sum, hex) => sum + Number(hex.priceCents), 0);
   const countries = new Set(
     allOwnedHexes
@@ -209,7 +209,7 @@ export default async function ProfilePage() {
                         {transaction.type.replace("_", " ").toLowerCase()} · {transaction.completedAt ? formatDate(transaction.completedAt) : formatDate(transaction.createdAt)}
                       </p>
                     </div>
-                    <span className="font-semibold">{money(Number(transaction.amountCents))}</span>
+                    <span className="font-semibold">{money(Number(transaction.amount))}</span>
                   </div>
                 ))
               ) : (
@@ -251,7 +251,7 @@ export default async function ProfilePage() {
                   <div key={transaction.id} className="rounded-md border border-border bg-background/50 p-3">
                     <div className="flex items-center justify-between gap-3">
                       <p className="break-all font-medium">{transaction.hex.h3Index}</p>
-                      <span className="font-semibold">{money(Number(transaction.amountCents))}</span>
+                      <span className="font-semibold">{money(Number(transaction.amount))}</span>
                     </div>
                     <p className="mt-1 text-sm text-muted-foreground">
                       <span className="inline-flex flex-wrap items-center gap-2">

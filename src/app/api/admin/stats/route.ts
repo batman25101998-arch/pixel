@@ -10,13 +10,13 @@ export async function GET() {
     prisma.user.count(),
     prisma.hex.count(),
     prisma.territory.count({ where: { status: "ACTIVE" } }),
-    prisma.transaction.aggregate({ where: { status: "COMPLETED" }, _sum: { amountCents: true } })
+    prisma.transaction.aggregate({ where: { status: "COMPLETED" }, _sum: { amount: true } })
   ]);
 
   return NextResponse.json({
     users,
     hexes,
     territories,
-    revenueCents: Number(revenue._sum.amountCents ?? 0)
+    revenueCents: Number(revenue._sum.amount ?? 0)
   });
 }

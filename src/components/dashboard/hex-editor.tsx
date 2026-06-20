@@ -15,7 +15,7 @@ type Hex = {
   message: string;
   avatarUrl: string | null;
   imageUrl: string | null;
-  externalLink: string | null;
+  link: string | null;
   status: "OWNED" | "FOR_SALE" | "LOCKED" | "BANNED" | "AVAILABLE";
   priceCents: bigint | number;
 };
@@ -58,7 +58,7 @@ export function HexEditor({ hex }: { hex: Hex }) {
           <Label>Message</Label>
           <Textarea name="message" defaultValue={hex.message} maxLength={240} />
         </div>
-        <div className="space-y-1.5"><Label>External link</Label><Input name="externalLink" type="url" defaultValue={hex.externalLink ?? ""} /></div>
+        <div className="space-y-1.5"><Label>External link</Label><Input name="externalLink" type="url" defaultValue={hex.link ?? ""} /></div>
         {hex.imageUrl ? <img src={hex.imageUrl} alt="Collectible preview" className="aspect-video w-full max-w-md rounded-md object-cover" /> : null}
         <div className="grid gap-3 md:grid-cols-2">
           <div className="space-y-1.5">

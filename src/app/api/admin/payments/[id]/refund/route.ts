@@ -39,9 +39,9 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
             where: { id: payment.transaction.hexId },
             data: { status: "LOCKED" }
           });
-          await transaction.marketplace.updateMany({
-            where: { hexId: payment.transaction.hexId, status: "ACTIVE" },
-            data: { status: "CANCELED" }
+          await transaction.marketplaceListing.updateMany({
+              where: { hexId: payment.transaction.hexId, status: "ACTIVE", active: true },
+              data: { status: "CANCELED", active: false }
           });
         }
       }
