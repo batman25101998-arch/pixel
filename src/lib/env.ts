@@ -23,12 +23,15 @@ const serverSchema = z.object({
 
 export const isDemoMode = process.env.DEMO_MODE === "true";
 
+const vercelHost = process.env.VERCEL_PROJECT_PRODUCTION_URL ?? process.env.VERCEL_URL;
+const deploymentUrl = vercelHost ? `https://${vercelHost}` : "http://localhost:3000";
+
 export const env = serverSchema.parse({
   DATABASE_URL: process.env.DATABASE_URL ?? (isDemoMode ? "postgresql://demo:demo@localhost:5432/demo" : undefined),
   AUTH_SECRET: process.env.NEXTAUTH_SECRET ?? process.env.AUTH_SECRET ?? (isDemoMode ? "demo-mode-secret-at-least-32-characters" : undefined),
   AUTH_URL: process.env.AUTH_URL,
-  NEXTAUTH_URL: process.env.NEXTAUTH_URL ?? process.env.AUTH_URL ?? "http://localhost:3000",
-  NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
+  NEXTAUTH_URL: process.env.NEXTAUTH_URL ?? process.env.AUTH_URL ?? deploymentUrl,
+  NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL ?? deploymentUrl,
   NEXT_PUBLIC_MAP_STYLE_URL:
     process.env.NEXT_PUBLIC_MAP_STYLE_URL ??
     "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
