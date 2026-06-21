@@ -64,6 +64,24 @@ export const demoRankings: GlobalRankings = {
     value: Date.now() - index * 86_400_000,
     secondary: "New owner"
   })),
+  founderRanking: demoOwners.map(([id, name, owned], index) => ({
+    id: `${id}-founder`,
+    name,
+    image: null,
+    founderNumber: index + 1,
+    kingdomUnlocked: Number(owned) >= 1000,
+    value: index + 1,
+    secondary: "Permanent Founder"
+  })),
+  topKingdoms: demoOwners.map(([id, name, owned], index) => ({
+    id: `${id}-kingdom`,
+    name: ["Verdant Crown", "Atlas Dominion", "Aurora Reach", "Sunline Kingdom", "Pixel Republic"][index],
+    image: null,
+    founderNumber: index + 1,
+    kingdomUnlocked: true,
+    value: Number(owned),
+    secondary: `Kingdom by ${name}`
+  })),
   firstBuyers: demoOwners.map(([id, name], index) => ({
     id,
     name,

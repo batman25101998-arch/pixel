@@ -18,6 +18,8 @@ export type GlobalRankings = {
   mostCountries: RankedOwner[];
   mostSettlements: RankedOwner[];
   newestOwners: RankedOwner[];
+  founderRanking: RankedOwner[];
+  topKingdoms: RankedOwner[];
   firstBuyers: RankedOwner[];
   recentPurchases: Array<{
     id: string;
@@ -40,6 +42,8 @@ const emptyRankings: GlobalRankings = {
   mostCountries: [],
   mostSettlements: [],
   newestOwners: [],
+  founderRanking: [],
+  topKingdoms: [],
   firstBuyers: [],
   recentPurchases: []
 };
@@ -48,7 +52,7 @@ export async function getGlobalRankings(limit = 10): Promise<GlobalRankings> {
   const take = Math.min(Math.max(Math.floor(limit), 1), 50);
 
   try {
-    const [territories, owners, values, countries, firstBuyerGroups, purchases, settlementOwners, newestOwners] = await Promise.all([
+    const [territories, owners, values, countries, firstBuyerGroups, purchases, settlementOwners, newestOwners, founders, kingdoms] = await Promise.all([
       prisma.territory.findMany({
         where: { status: "ACTIVE" },
         orderBy: [{ hexCount: "desc" }, { createdAt: "asc" }],
@@ -110,6 +114,18 @@ export async function getGlobalRankings(limit = 10): Promise<GlobalRankings> {
         orderBy: { createdAt: "desc" },
         take,
         select: { id: true, displayName: true, avatarUrl: true, founderNumber: true, kingdomUnlockedAt: true, createdAt: true }
+      }),
+      prisma.user.findMany({
+        where: { founderNumber: { not: null } },
+        orderBy: { founderNumber: "asc" },
+        take,
+        select: { id: true, displayName: true, avatarUrl: true, founderNumber: true, kingdomUnlockedAt: true }
+      }),
+      prisma.territory.findMany({
+        where: { status: "ACTIVE", level: { in: ["KINGDOM", "EMPIRE"] } },
+        orderBy: [{ hexCount: "desc" }, { createdAt: "asc" }],
+        take,
+        include: { owner: { select: { displayName: true, avatarUrl: true, founderNumber: true, kingdomUnlockedAt: true } } }
       })
     ]);
 
@@ -194,6 +210,24 @@ export async function getGlobalRankings(limit = 10): Promise<GlobalRankings> {
         kingdomUnlocked: Boolean(owner.kingdomUnlockedAt),
         value: owner.createdAt.getTime(),
         secondary: "New owner"
+      })),
+      founderRanking: founders.map((owner) => ({
+        id: owner.id,
+        name: owner.displayName,
+        image: owner.avatarUrl,
+        founderNumber: owner.founderNumber,
+        kingdomUnlocked: Boolean(owner.kingdomUnlockedAt),
+        value: owner.founderNumber ?? 10_001,
+        secondary: "Permanent Founder"
+      })),
+      topKingdoms: kingdoms.map((territory) => ({
+        id: territory.id,
+        name: territory.name,
+        image: territory.owner.avatarUrl,
+        founderNumber: territory.owner.founderNumber,
+        kingdomUnlocked: Boolean(territory.owner.kingdomUnlockedAt),
+        value: territory.hexCount,
+        secondary: `${territory.level.toLowerCase()} by ${territory.owner.displayName}`
       })),
       firstBuyers: firstBuyerGroups.flatMap((entry) => {
         const owner = ownerById.get(entry.buyerId);

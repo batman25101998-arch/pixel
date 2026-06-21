@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { CalendarDays, Globe2, Hexagon, Landmark, Tag, Wallet } from "lucide-react";
+import { CalendarDays, Crown, Globe2, Hexagon, Landmark, Medal, Tag, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -94,10 +94,13 @@ export function DemoDashboard() {
     marketplaceListings: ownedHexes.filter((hex) => hex.forSale).length
   });
   const stats = [
+    { label: "Founder number", value: `#${DEMO_USER.founderNumber}`, icon: Crown },
+    { label: "Owner rank", value: "#4,275", icon: Medal },
     { label: "Owned hexes", value: ownedHexes.length, icon: Hexagon },
-    { label: "Kingdoms", value: territories.length, icon: Landmark },
+    { label: "Territories", value: territories.length, icon: Landmark },
     { label: "Countries", value: countries.size, icon: Globe2 },
     { label: "Total spent", value: money(totalSpent), icon: Wallet },
+    { label: "Kingdom status", value: largestConnected >= 1000 ? "Unlocked" : `${1000 - largestConnected} to go`, icon: Crown },
     { label: "Joined", value: "Jan 1, 2026", icon: CalendarDays }
   ];
 
@@ -140,7 +143,7 @@ export function DemoDashboard() {
 
       <Card className="mt-4"><CardHeader><CardTitle>Badges</CardTitle></CardHeader><CardContent><GamificationBadges badges={badges} /></CardContent></Card>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {stats.map(({ label, value, icon: Icon }) => (
           <Card key={label}><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">{label}</CardTitle><Icon className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><p className="text-2xl font-semibold">{String(value)}</p></CardContent></Card>
         ))}

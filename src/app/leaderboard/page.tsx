@@ -97,13 +97,13 @@ export default async function LeaderboardPage() {
 
       <section className="grid gap-5 lg:grid-cols-2">
         <RankingCard
-          title="Largest territory"
+          title="Largest Territories"
           icon={Flag}
           entries={rankings.largestTerritories}
           valueLabel={(entry) => `${formatNumber(entry.value)} hexes`}
         />
         <RankingCard
-          title="Most owned hexes"
+          title="Top Owners"
           icon={Hexagon}
           entries={rankings.mostOwnedHexes}
           valueLabel={(entry) => formatNumber(entry.value)}
@@ -127,10 +127,25 @@ export default async function LeaderboardPage() {
           valueLabel={(entry) => formatNumber(entry.value)}
         />
         <RankingCard
-          title="Newest owners"
+          title="Newest Buyers"
           icon={Users}
           entries={rankings.newestOwners}
           valueLabel={(entry) => new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(new Date(entry.value))}
+        />
+      </section>
+
+      <section className="mt-5 grid gap-5 lg:grid-cols-2">
+        <RankingCard
+          title="Founder Ranking"
+          icon={Trophy}
+          entries={rankings.founderRanking}
+          valueLabel={(entry) => `#${formatNumber(entry.value)}`}
+        />
+        <RankingCard
+          title="Top Kingdoms"
+          icon={Crown}
+          entries={rankings.topKingdoms}
+          valueLabel={(entry) => `${formatNumber(entry.value)} hexes`}
         />
       </section>
 

@@ -1,11 +1,17 @@
 import { EarthMap } from "@/components/map/earth-map";
 import { PurchasePanel } from "@/components/map/purchase-panel";
 import { SearchBar } from "@/components/map/search-bar";
+import { PublicGameSections } from "@/components/public-game-sections";
+import { demoContinentStats, getContinentStats } from "@/lib/continent-stats";
+import { isDemoMode } from "@/lib/env";
 import { BarChart3, Download, Hexagon, Play, Shield, Users } from "lucide-react";
 
-export default function HomePage() {
+export default async function HomePage() {
+  const continentStats = isDemoMode ? demoContinentStats : await getContinentStats();
+
   return (
-    <section className="grid h-[calc(100vh-86px)] min-h-0 grid-cols-[470px_1fr] overflow-hidden bg-[#061425]">
+    <main>
+    <section id="map" className="grid min-h-[calc(100vh-86px)] bg-[#061425] lg:h-[calc(100vh-86px)] lg:min-h-0 lg:grid-cols-[minmax(340px,470px)_1fr] lg:overflow-hidden">
       <aside className="min-h-0 overflow-y-auto border-r border-cyan-200/14 bg-[#071827]/96 p-4 shadow-2xl shadow-black/35">
         <div className="rounded-lg border border-cyan-200/18 bg-[#0a1c2c]/88 p-5 shadow-2xl shadow-black/35 backdrop-blur-md">
           <h2 className="text-xl font-semibold text-white">The World for Everyone.</h2>
@@ -81,11 +87,13 @@ export default function HomePage() {
         </div>
       </aside>
 
-      <div className="relative h-full min-h-0 min-w-0 overflow-hidden">
+      <div className="relative h-[72vh] min-h-[520px] min-w-0 overflow-hidden lg:h-full lg:min-h-0">
         <EarthMap />
         <SearchBar />
         <PurchasePanel />
       </div>
     </section>
+    <PublicGameSections continentStats={continentStats} />
+    </main>
   );
 }

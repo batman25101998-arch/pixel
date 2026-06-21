@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { CheckCircle2, Loader2 } from "lucide-react";
+import { CheckCircle2, Copy, Loader2, Share2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -14,6 +14,7 @@ type CheckoutResult = {
 export function CheckoutSuccess({ sessionId }: { sessionId: string }) {
   const [result, setResult] = useState<CheckoutResult>({ status: "PENDING" });
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -52,6 +53,28 @@ export function CheckoutSuccess({ sessionId }: { sessionId: string }) {
     ? `/?hex=${encodeURIComponent(result.certificate.h3Index)}`
     : "/";
 
+  function shareUrl() {
+    return new URL(mapHref, window.location.origin).toString();
+  }
+
+  async function copyHexLink() {
+    try {
+      await navigator.clipboard.writeText(shareUrl());
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setError("The hex link could not be copied. You can copy it from the map page.");
+    }
+  }
+
+  function shareTo(network: "x" | "facebook") {
+    const url = encodeURIComponent(shareUrl());
+    const destination = network === "x"
+      ? `https://x.com/intent/post?text=${encodeURIComponent("I just claimed a piece of Earth.")}&url=${url}`
+      : `https://www.facebook.com/sharer/sharer.php?u=${url}`;
+    window.open(destination, "_blank", "noopener,noreferrer,width=720,height=640");
+  }
+
   return (
     <Card className="w-full max-w-lg">
       <CardHeader>
@@ -69,6 +92,17 @@ export function CheckoutSuccess({ sessionId }: { sessionId: string }) {
               : "Stripe has returned successfully. We are waiting for the secure webhook confirmation."}
         </p>
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
+        {completed ? (
+          <div className="space-y-3 border-t border-border pt-5">
+            <div className="flex items-center gap-2"><Share2 className="h-4 w-4 text-secondary" /><h3 className="font-semibold">Share your land</h3></div>
+            <p className="break-all rounded-md border border-border bg-background/60 p-3 text-xs text-muted-foreground">{result.certificate?.h3Index}</p>
+            <div className="grid gap-2 sm:grid-cols-3">
+              <Button type="button" variant="outline" onClick={copyHexLink}><Copy className="h-4 w-4" />{copied ? "Copied" : "Copy link"}</Button>
+              <Button type="button" variant="outline" onClick={() => shareTo("x")}>Share to X</Button>
+              <Button type="button" variant="outline" onClick={() => shareTo("facebook")}>Facebook</Button>
+            </div>
+          </div>
+        ) : null}
         <Button asChild className="w-full"><Link href={mapHref}>{completed ? "View my hex" : "Return to map"}</Link></Button>
       </CardContent>
     </Card>

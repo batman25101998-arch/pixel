@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { CalendarDays, Globe2, Hexagon, Landmark, ReceiptText, TrendingUp, Wallet } from "lucide-react";
+import { CalendarDays, Crown, Globe2, Hexagon, Landmark, Medal, ReceiptText, TrendingUp, Wallet } from "lucide-react";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { countryForCoordinates, countryNameForCoordinates } from "@/lib/geography";
@@ -13,6 +13,7 @@ import { KingdomBadge } from "@/components/kingdom-badge";
 import { GamificationBadges } from "@/components/gamification-badges";
 import { getConnectedHexGroups, getTerritoryLevel, getUserBadges } from "@/lib/gamification";
 import { isDemoMode } from "@/lib/env";
+import { DemoDashboard } from "@/components/dashboard/demo-dashboard";
 
 function formatDate(value: Date) {
   return new Intl.DateTimeFormat("en", {
@@ -23,7 +24,7 @@ function formatDate(value: Date) {
 }
 
 export default async function ProfilePage() {
-  if (isDemoMode) redirect("/dashboard");
+  if (isDemoMode) return <DemoDashboard />;
 
   const session = await auth();
   if (!session?.user?.id) redirect("/sign-in");
@@ -56,16 +57,19 @@ export default async function ProfilePage() {
 
   if (!user) redirect("/sign-in");
 
-  const ownedHexCount = await prisma.hex.count({ where: { ownerId: user.id } });
-  const allOwnedHexes = await prisma.hex.findMany({
-    where: { ownerId: user.id },
-    select: {
-      h3Index: true,
-      latitude: true,
-      longitude: true,
-      priceCents: true
-    }
-  });
+  const [ownedHexCount, allOwnedHexes, rankedOwners] = await Promise.all([
+    prisma.hex.count({ where: { ownerId: user.id } }),
+    prisma.hex.findMany({
+      where: { ownerId: user.id },
+      select: { h3Index: true, latitude: true, longitude: true, priceCents: true }
+    }),
+    prisma.user.findMany({
+      where: { ownedHexes: { some: {} } },
+      orderBy: { ownedHexes: { _count: "desc" } },
+      take: 1000,
+      select: { id: true }
+    })
+  ]);
 
   const totalSpent = user.buyerDeals.reduce((sum, transaction) => sum + Number(transaction.amount), 0);
   const estimatedValue = allOwnedHexes.reduce((sum, hex) => sum + Number(hex.priceCents), 0);
@@ -83,7 +87,11 @@ export default async function ProfilePage() {
     territories: user.territories.map((territory) => ({ hexCount: territory._count.hexes })),
     marketplaceListings: user.ownedHexes.filter((hex) => hex.status === "FOR_SALE").length
   });
-  const territoryLevel = getTerritoryLevel(getConnectedHexGroups(allOwnedHexes.map((hex) => hex.h3Index))[0]?.length ?? 0);
+  const largestConnected = getConnectedHexGroups(allOwnedHexes.map((hex) => hex.h3Index))[0]?.length ?? 0;
+  const territoryLevel = getTerritoryLevel(largestConnected);
+  const rankIndex = rankedOwners.findIndex((owner) => owner.id === user.id);
+  const rank = rankIndex >= 0 ? `#${formatNumber(rankIndex + 1)}` : "Unranked";
+  const kingdomStatus = largestConnected >= 1000 ? "Unlocked" : `${formatNumber(1000 - largestConnected)} to Kingdom`;
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8">
@@ -109,7 +117,9 @@ export default async function ProfilePage() {
         </Button>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <Card><CardHeader className="flex flex-row items-center justify-between space-y-0"><CardTitle className="text-sm font-medium">Founder number</CardTitle><Crown className="h-4 w-4 text-amber-300" /></CardHeader><CardContent><p className="text-2xl font-semibold">{user.founderNumber ? `#${formatNumber(user.founderNumber)}` : "Not assigned"}</p></CardContent></Card>
+        <Card><CardHeader className="flex flex-row items-center justify-between space-y-0"><CardTitle className="text-sm font-medium">Owner rank</CardTitle><Medal className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><p className="text-2xl font-semibold">{rank}</p></CardContent></Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0">
             <CardTitle className="text-sm font-medium">Joined</CardTitle>
@@ -120,6 +130,7 @@ export default async function ProfilePage() {
           </CardContent>
         </Card>
         <Card><CardHeader><CardTitle className="text-sm font-medium">Territory level</CardTitle></CardHeader><CardContent><p className="text-2xl font-semibold">{territoryLevel}</p></CardContent></Card>
+        <Card><CardHeader><CardTitle className="text-sm font-medium">Kingdom status</CardTitle></CardHeader><CardContent><p className="text-2xl font-semibold">{kingdomStatus}</p></CardContent></Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0">
             <CardTitle className="text-sm font-medium">Owned hexes</CardTitle>
