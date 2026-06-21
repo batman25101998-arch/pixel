@@ -22,7 +22,6 @@ const serverSchema = z.object({
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   APPLE_ID: z.string().optional(),
   APPLE_SECRET: z.string().optional(),
-  EMAIL_SERVER: z.string().optional(),
   EMAIL_FROM: z.string().min(3).optional(),
   RESEND_API_KEY: z.string().min(1).optional()
 });
@@ -31,7 +30,7 @@ export const isDemoMode = process.env.DEMO_MODE === "true";
 
 export const env = serverSchema.parse({
   DATABASE_URL: process.env.DATABASE_URL ?? (isDemoMode ? "postgresql://demo:demo@localhost:5432/demo" : undefined),
-  AUTH_SECRET: process.env.AUTH_SECRET ?? (isDemoMode ? "demo-mode-secret-at-least-32-characters" : undefined),
+  AUTH_SECRET: process.env.NEXTAUTH_SECRET ?? process.env.AUTH_SECRET ?? (isDemoMode ? "demo-mode-secret-at-least-32-characters" : undefined),
   AUTH_URL: process.env.AUTH_URL,
   NEXTAUTH_URL: process.env.NEXTAUTH_URL ?? process.env.AUTH_URL ?? "http://localhost:3000",
   NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
@@ -54,7 +53,6 @@ export const env = serverSchema.parse({
   GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
   APPLE_ID: process.env.APPLE_ID,
   APPLE_SECRET: process.env.APPLE_SECRET,
-  EMAIL_SERVER: process.env.EMAIL_SERVER,
   EMAIL_FROM: process.env.EMAIL_FROM,
   RESEND_API_KEY: process.env.RESEND_API_KEY
 });

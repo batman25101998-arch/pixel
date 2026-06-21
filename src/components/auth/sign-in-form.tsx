@@ -109,7 +109,7 @@ export function SignInForm({ googleEnabled, appleEnabled, emailEnabled, callback
           </div>
           <Button className="w-full" disabled={!emailEnabled || busyProvider !== null}>
             <Mail className="h-4 w-4" />
-            {busyProvider === "email" ? "Sending link..." : emailEnabled ? "Continue with Email" : "Continue with Email - Coming soon"}
+            {busyProvider === "email" ? "Sending link..." : emailEnabled ? "Continue with Email" : "Email coming soon"}
           </Button>
         </form>
 
