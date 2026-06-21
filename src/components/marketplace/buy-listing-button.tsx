@@ -7,7 +7,7 @@ import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { isClientDemoMode } from "@/lib/demo";
 import { buyDemoHex, getDemoOwnedHexes } from "@/lib/demo-storage";
-import { startGoogleSignIn } from "@/lib/client-auth";
+import { redirectToSignIn } from "@/lib/client-auth";
 
 export function BuyListingButton({ h3Index, priceCents = 100 }: { h3Index: string; priceCents?: number }) {
   const { status: authenticationStatus } = useSession();
@@ -23,12 +23,7 @@ export function BuyListingButton({ h3Index, priceCents = 100 }: { h3Index: strin
     setBusy(true);
     setError(null);
     if (!isClientDemoMode && authenticationStatus !== "authenticated") {
-      try {
-        await startGoogleSignIn(`${window.location.pathname}${window.location.search}`);
-      } catch {
-        setBusy(false);
-        setError("Sign in with Google to purchase this listing.");
-      }
+      redirectToSignIn(`${window.location.pathname}${window.location.search}`);
       return;
     }
     if (isClientDemoMode) {

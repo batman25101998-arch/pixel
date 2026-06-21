@@ -20,8 +20,11 @@ const serverSchema = z.object({
   HEX_RESOLUTION: z.coerce.number().int().min(0).max(15).default(5),
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
-  APPLE_CLIENT_ID: z.string().optional(),
-  APPLE_CLIENT_SECRET: z.string().optional()
+  APPLE_ID: z.string().optional(),
+  APPLE_SECRET: z.string().optional(),
+  EMAIL_SERVER: z.string().optional(),
+  EMAIL_FROM: z.string().min(3).optional(),
+  RESEND_API_KEY: z.string().min(1).optional()
 });
 
 export const isDemoMode = process.env.DEMO_MODE === "true";
@@ -49,8 +52,11 @@ export const env = serverSchema.parse({
   HEX_RESOLUTION: process.env.HEX_RESOLUTION ?? "5",
   GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
   GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
-  APPLE_CLIENT_ID: process.env.APPLE_CLIENT_ID,
-  APPLE_CLIENT_SECRET: process.env.APPLE_CLIENT_SECRET
+  APPLE_ID: process.env.APPLE_ID,
+  APPLE_SECRET: process.env.APPLE_SECRET,
+  EMAIL_SERVER: process.env.EMAIL_SERVER,
+  EMAIL_FROM: process.env.EMAIL_FROM,
+  RESEND_API_KEY: process.env.RESEND_API_KEY
 });
 
 export const isAdminEmail = (email?: string | null) =>

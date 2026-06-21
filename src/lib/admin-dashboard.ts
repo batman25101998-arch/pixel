@@ -95,11 +95,19 @@ const emptyDashboard: AdminDashboardData = {
   auditLog: []
 };
 
-type SalesRow = { day: Date; count: bigint; revenueCents: bigint };
-type HeatRow = { latitude: Prisma.Decimal; longitude: Prisma.Decimal; count: bigint; valueCents: bigint };
+type CompletedSale = { completedAt: Date | null; amount: bigint };
+type HeatHex = { latitude: number | null; longitude: number | null; priceCents: bigint };
 
-function salesTimeline(rows: SalesRow[]) {
-  const byDay = new Map(rows.map((row) => [row.day.toISOString().slice(0, 10), row]));
+function salesTimeline(sales: CompletedSale[]) {
+  const byDay = new Map<string, { count: number; revenueCents: number }>();
+  for (const sale of sales) {
+    if (!sale.completedAt) continue;
+    const day = sale.completedAt.toISOString().slice(0, 10);
+    const current = byDay.get(day) ?? { count: 0, revenueCents: 0 };
+    current.count += 1;
+    current.revenueCents += Number(sale.amount);
+    byDay.set(day, current);
+  }
   const today = new Date();
   today.setUTCHours(0, 0, 0, 0);
 
@@ -109,10 +117,25 @@ function salesTimeline(rows: SalesRow[]) {
     const row = byDay.get(day.toISOString().slice(0, 10));
     return {
       day: day.toISOString(),
-      count: Number(row?.count ?? 0),
-      revenueCents: Number(row?.revenueCents ?? 0)
+      count: row?.count ?? 0,
+      revenueCents: row?.revenueCents ?? 0
     };
   });
+}
+
+function heatmapBuckets(hexes: HeatHex[]) {
+  const buckets = new Map<string, { latitude: number; longitude: number; count: number; valueCents: number }>();
+  for (const hex of hexes) {
+    if (hex.latitude == null || hex.longitude == null) continue;
+    const latitude = Math.round(hex.latitude / 5) * 5;
+    const longitude = Math.round(hex.longitude / 5) * 5;
+    const key = `${latitude}:${longitude}`;
+    const bucket = buckets.get(key) ?? { latitude, longitude, count: 0, valueCents: 0 };
+    bucket.count += 1;
+    bucket.valueCents += Number(hex.priceCents);
+    buckets.set(key, bucket);
+  }
+  return Array.from(buckets.values()).sort((a, b) => b.count - a.count).slice(0, 400);
 }
 
 function transactionSearch(query: string): Prisma.TransactionWhereInput {
@@ -211,28 +234,19 @@ export async function getAdminDashboardData(query = ""): Promise<AdminDashboardD
           hex: { select: { h3Index: true } }
         }
       }),
-      prisma.$queryRaw<SalesRow[]>`
-        SELECT
-          date_trunc('day', completed_at) AS day,
-          COUNT(*)::bigint AS count,
-          COALESCE(SUM(amount_cents), 0)::bigint AS "revenueCents"
-        FROM transactions
-        WHERE status = 'COMPLETED'::transaction_status
-          AND completed_at >= now() - interval '29 days'
-        GROUP BY date_trunc('day', completed_at)
-        ORDER BY day ASC
-      `,
-      prisma.$queryRaw<HeatRow[]>`
-        SELECT
-          ROUND(latitude / 5) * 5 AS latitude,
-          ROUND(longitude / 5) * 5 AS longitude,
-          COUNT(*)::bigint AS count,
-          COALESCE(SUM(price_cents), 0)::bigint AS "valueCents"
-        FROM hexes
-        GROUP BY ROUND(latitude / 5), ROUND(longitude / 5)
-        ORDER BY count DESC
-        LIMIT 400
-      `,
+      prisma.transaction.findMany({
+        where: {
+          status: "COMPLETED",
+          completedAt: { gte: new Date(Date.now() - 29 * 24 * 60 * 60 * 1000) }
+        },
+        select: { completedAt: true, amount: true }
+      }),
+      prisma.hex.findMany({
+        where: { latitude: { not: null }, longitude: { not: null } },
+        select: { latitude: true, longitude: true, priceCents: true },
+        orderBy: { updatedAt: "desc" },
+        take: 100000
+      }),
       prisma.adminAuditLog.findMany({
         orderBy: { createdAt: "desc" },
         take: 20,
@@ -325,12 +339,7 @@ export async function getAdminDashboardData(query = ""): Promise<AdminDashboardD
         createdAt: transaction.createdAt.toISOString()
       })),
       sales: salesTimeline(sales),
-      heatmap: heatmap.map((row) => ({
-        latitude: Number(row.latitude),
-        longitude: Number(row.longitude),
-        count: Number(row.count),
-        valueCents: Number(row.valueCents)
-      })),
+      heatmap: heatmapBuckets(heatmap),
       auditLog: auditLog.map((entry) => ({
         id: entry.id,
         action: entry.action,

@@ -16,7 +16,7 @@ import { money } from "@/lib/utils";
 import { DEMO_USER, isClientDemoMode } from "@/lib/demo";
 import { buyDemoHex, getDemoOwnedHexes, updateDemoHexMetadata } from "@/lib/demo-storage";
 import { getUserBadges } from "@/lib/gamification";
-import { startGoogleSignIn } from "@/lib/client-auth";
+import { redirectToSignIn } from "@/lib/client-auth";
 import { useMapStore } from "@/stores/map-store";
 
 type Certificate = {
@@ -238,12 +238,9 @@ export function PurchasePanel() {
     setError(null);
 
     if (!isClientDemoMode && authenticationStatus !== "authenticated") {
-      try {
-        await startGoogleSignIn(`${window.location.pathname}${window.location.search}`);
-      } catch {
-        setBusy(false);
-        setError("Sign in with Google to purchase this hex.");
-      }
+      const callbackUrl = new URL(window.location.href);
+      callbackUrl.searchParams.set("hex", selectedHex.h3Index);
+      redirectToSignIn(`${callbackUrl.pathname}${callbackUrl.search}${callbackUrl.hash}`);
       return;
     }
 

@@ -1,8 +1,8 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { Mail } from "lucide-react";
 import { signIn } from "next-auth/react";
-import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -11,115 +11,110 @@ import { Label } from "@/components/ui/label";
 type SignInFormProps = {
   googleEnabled: boolean;
   appleEnabled: boolean;
+  emailEnabled: boolean;
   callbackUrl: string;
 };
 
-export function SignInForm({ googleEnabled, appleEnabled, callbackUrl }: SignInFormProps) {
-  const router = useRouter();
-  const [mode, setMode] = useState<"signin" | "register">("signin");
+export function SignInForm({ googleEnabled, appleEnabled, emailEnabled, callbackUrl }: SignInFormProps) {
+  const [busyProvider, setBusyProvider] = useState<"google" | "apple" | "email" | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [emailSent, setEmailSent] = useState(false);
 
-  async function signInWithApple() {
-    setBusy(true);
-    setError(null);
-    await signIn("apple", { redirectTo: callbackUrl });
-  }
-
-  async function signInWithGoogle() {
-    if (!googleEnabled) return;
-    setBusy(true);
+  async function signInWithProvider(provider: "google" | "apple") {
+    setBusyProvider(provider);
     setError(null);
     try {
-      await signIn("google", { redirectTo: callbackUrl });
+      await signIn(provider, { callbackUrl });
     } catch {
-      setBusy(false);
-      setError("Google sign-in could not be started.");
+      setBusyProvider(null);
+      setError(`${provider === "google" ? "Google" : "Apple"} sign-in could not be started.`);
     }
   }
 
-  async function submit(event: FormEvent<HTMLFormElement>) {
+  async function signInWithEmail(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setBusy(true);
+    if (!emailEnabled) return;
+
+    const email = String(new FormData(event.currentTarget).get("email") ?? "").trim();
+    if (!email) return;
+
+    setBusyProvider("email");
     setError(null);
-    const form = new FormData(event.currentTarget);
-    const email = String(form.get("email"));
-    const password = String(form.get("password"));
-    const displayName = String(form.get("displayName") ?? "");
-
-    if (mode === "register") {
-      const response = await fetch("/api/auth/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password, displayName })
+    setEmailSent(false);
+    try {
+      const result = await signIn("email", {
+        email,
+        callbackUrl,
+        redirect: false
       });
-      if (!response.ok) {
-        const data = await response.json();
-        setError(typeof data.error === "string" ? data.error : "Registration failed.");
-        setBusy(false);
-        return;
+      if (result?.error) {
+        setError("The sign-in email could not be sent.");
+      } else {
+        setEmailSent(true);
       }
+    } catch {
+      setError("The sign-in email could not be sent.");
+    } finally {
+      setBusyProvider(null);
     }
-
-    const result = await signIn("credentials", { email, password, redirect: false });
-    setBusy(false);
-    if (result?.error) {
-      setError("Email or password is incorrect.");
-      return;
-    }
-    router.push(callbackUrl);
-    router.refresh();
   }
 
   return (
     <Card className="w-full max-w-md">
       <CardHeader>
-        <CardTitle>{mode === "signin" ? "Sign in" : "Create account"}</CardTitle>
+        <CardTitle>Sign in</CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-5">
         <div className="grid gap-2">
-          <Button className="w-full" variant="outline" onClick={signInWithGoogle} disabled={busy || !googleEnabled}>
-            <span className="mr-2 flex h-5 w-5 items-center justify-center rounded-full border border-border text-xs font-bold">G</span>
-            Continue with Google
+          <Button
+            className="w-full"
+            type="button"
+            variant="outline"
+            disabled={!googleEnabled || busyProvider !== null}
+            onClick={() => signInWithProvider("google")}
+          >
+            <span className="flex h-5 w-5 items-center justify-center rounded-full border border-border text-xs font-bold">G</span>
+            {busyProvider === "google" ? "Connecting..." : googleEnabled ? "Continue with Google" : "Google unavailable"}
           </Button>
-          <Button className="w-full" variant="outline" onClick={signInWithApple} disabled={busy || !appleEnabled}>
-            <span className="mr-2 flex h-5 w-5 items-center justify-center rounded-full border border-border text-xs font-bold">A</span>
-            Continue with Apple
+          <Button
+            className="w-full"
+            type="button"
+            variant="outline"
+            disabled={!appleEnabled || busyProvider !== null}
+            onClick={() => signInWithProvider("apple")}
+          >
+            <span className="flex h-5 w-5 items-center justify-center rounded-full border border-border text-xs font-bold">A</span>
+            {busyProvider === "apple" ? "Connecting..." : appleEnabled ? "Continue with Apple" : "Continue with Apple - Coming soon"}
           </Button>
         </div>
-        {!googleEnabled ? (
-          <p className="mt-3 text-sm text-muted-foreground">
-            Google sign-in is unavailable until GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are configured.
-          </p>
-        ) : null}
 
-        <div className="my-5 flex items-center gap-3">
+        <div className="flex items-center gap-3">
           <div className="h-px flex-1 bg-border" />
           <span className="text-xs uppercase tracking-wide text-muted-foreground">or</span>
           <div className="h-px flex-1 bg-border" />
         </div>
 
-        <form className="space-y-4" onSubmit={submit}>
-          {mode === "register" ? (
-            <div className="space-y-1.5">
-              <Label htmlFor="displayName">Display name</Label>
-              <Input id="displayName" name="displayName" minLength={2} maxLength={40} required />
-            </div>
-          ) : null}
+        <form className="space-y-3" onSubmit={signInWithEmail}>
           <div className="space-y-1.5">
-            <Label htmlFor="email">Email</Label>
-            <Input id="email" name="email" type="email" autoComplete="email" required />
+            <Label htmlFor="magic-link-email">Email</Label>
+            <Input
+              id="magic-link-email"
+              name="email"
+              type="email"
+              autoComplete="email"
+              placeholder="you@example.com"
+              required
+              disabled={!emailEnabled || busyProvider !== null}
+            />
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="password">Password</Label>
-            <Input id="password" name="password" type="password" minLength={8} autoComplete={mode === "signin" ? "current-password" : "new-password"} required />
-          </div>
-          {error ? <p className="text-sm text-destructive">{error}</p> : null}
-          <Button className="w-full" disabled={busy}>{busy ? "Working..." : mode === "signin" ? "Sign in" : "Create account"}</Button>
+          <Button className="w-full" disabled={!emailEnabled || busyProvider !== null}>
+            <Mail className="h-4 w-4" />
+            {busyProvider === "email" ? "Sending link..." : emailEnabled ? "Continue with Email" : "Continue with Email - Coming soon"}
+          </Button>
         </form>
-        <Button className="mt-3 w-full" variant="ghost" onClick={() => setMode(mode === "signin" ? "register" : "signin")}>
-          {mode === "signin" ? "Need an account?" : "Already have an account?"}
-        </Button>
+
+        {emailSent ? <p className="text-sm text-emerald-400">Check your email for a secure sign-in link.</p> : null}
+        {error ? <p className="text-sm text-destructive">{error}</p> : null}
       </CardContent>
     </Card>
   );

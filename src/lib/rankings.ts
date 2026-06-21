@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { formatNumber } from "@/lib/utils";
 
 export type RankedOwner = {
   id: string;
@@ -43,11 +44,6 @@ const emptyRankings: GlobalRankings = {
   recentPurchases: []
 };
 
-type CountryAggregate = {
-  ownerId: string;
-  countryCount: bigint;
-};
-
 export async function getGlobalRankings(limit = 10): Promise<GlobalRankings> {
   const take = Math.min(Math.max(Math.floor(limit), 1), 50);
 
@@ -79,14 +75,11 @@ export async function getGlobalRankings(limit = 10): Promise<GlobalRankings> {
         orderBy: { _sum: { priceCents: "desc" } },
         take
       }),
-      prisma.$queryRaw<CountryAggregate[]>`
-        SELECT owner_id AS "ownerId", COUNT(DISTINCT country_code)::bigint AS "countryCount"
-        FROM hexes
-        WHERE country_code IS NOT NULL
-        GROUP BY owner_id
-        ORDER BY "countryCount" DESC, owner_id ASC
-        LIMIT ${take}
-      `,
+      prisma.hex.groupBy({
+        by: ["ownerId", "countryCode"],
+        where: { countryCode: { not: null } },
+        orderBy: [{ ownerId: "asc" }, { countryCode: "asc" }]
+      }),
       prisma.transaction.groupBy({
         by: ["buyerId"],
         where: { status: "COMPLETED", type: "PRIMARY_PURCHASE", completedAt: { not: null } },
@@ -120,9 +113,17 @@ export async function getGlobalRankings(limit = 10): Promise<GlobalRankings> {
       })
     ]);
 
+    const countryCounts = Array.from(countries.reduce((counts, entry) => {
+      counts.set(entry.ownerId, (counts.get(entry.ownerId) ?? 0) + 1);
+      return counts;
+    }, new Map<string, number>()).entries())
+      .map(([ownerId, countryCount]) => ({ ownerId, countryCount }))
+      .sort((a, b) => b.countryCount - a.countryCount || a.ownerId.localeCompare(b.ownerId))
+      .slice(0, take);
+
     const aggregateOwnerIds = new Set([
       ...values.map((entry) => entry.ownerId),
-      ...countries.map((entry) => entry.ownerId),
+      ...countryCounts.map((entry) => entry.ownerId),
       ...firstBuyerGroups.map((entry) => entry.buyerId)
     ]);
     const aggregateOwners = await prisma.user.findMany({
@@ -159,11 +160,11 @@ export async function getGlobalRankings(limit = 10): Promise<GlobalRankings> {
               founderNumber: owner.founderNumber,
               kingdomUnlocked: Boolean(owner.kingdomUnlockedAt),
               value: Number(entry._sum.priceCents ?? 0),
-              secondary: `${entry._count._all.toLocaleString()} hexes`
+              secondary: `${formatNumber(entry._count._all)} hexes`
             }]
           : [];
       }),
-      mostCountries: countries.flatMap((entry) => {
+      mostCountries: countryCounts.flatMap((entry) => {
         const owner = ownerById.get(entry.ownerId);
         return owner
           ? [{
@@ -172,7 +173,7 @@ export async function getGlobalRankings(limit = 10): Promise<GlobalRankings> {
               image: owner.avatarUrl,
               founderNumber: owner.founderNumber,
               kingdomUnlocked: Boolean(owner.kingdomUnlockedAt),
-              value: Number(entry.countryCount)
+              value: entry.countryCount
             }]
           : [];
       }),

@@ -15,7 +15,7 @@ import { FounderBadge } from "@/components/founder-badge";
 import { KingdomBadge } from "@/components/kingdom-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getGlobalRankings, type RankedOwner } from "@/lib/rankings";
-import { money } from "@/lib/utils";
+import { formatNumber, money } from "@/lib/utils";
 import { demoRankings } from "@/lib/demo";
 import { isDemoMode } from "@/lib/env";
 
@@ -100,13 +100,13 @@ export default async function LeaderboardPage() {
           title="Largest territory"
           icon={Flag}
           entries={rankings.largestTerritories}
-          valueLabel={(entry) => `${entry.value.toLocaleString()} hexes`}
+          valueLabel={(entry) => `${formatNumber(entry.value)} hexes`}
         />
         <RankingCard
           title="Most owned hexes"
           icon={Hexagon}
           entries={rankings.mostOwnedHexes}
-          valueLabel={(entry) => entry.value.toLocaleString()}
+          valueLabel={(entry) => formatNumber(entry.value)}
         />
         <RankingCard
           title="Most valuable hexes"
@@ -118,13 +118,13 @@ export default async function LeaderboardPage() {
           title="Most countries"
           icon={Globe2}
           entries={rankings.mostCountries}
-          valueLabel={(entry) => `${entry.value.toLocaleString()} countries`}
+          valueLabel={(entry) => `${formatNumber(entry.value)} countries`}
         />
         <RankingCard
           title="Most villages, cities, and kingdoms"
           icon={Landmark}
           entries={rankings.mostSettlements}
-          valueLabel={(entry) => entry.value.toLocaleString()}
+          valueLabel={(entry) => formatNumber(entry.value)}
         />
         <RankingCard
           title="Newest owners"

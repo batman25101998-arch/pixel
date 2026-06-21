@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Crown } from "lucide-react";
+import { formatNumber } from "@/lib/utils";
 
 export function FounderSpots({ initialRemaining }: { initialRemaining: number | null }) {
   const [remaining, setRemaining] = useState(initialRemaining);
@@ -32,7 +33,7 @@ export function FounderSpots({ initialRemaining }: { initialRemaining: number | 
   return (
     <Link href="/sign-in" className="flex items-center gap-1.5 text-xs font-medium text-amber-300 hover:text-amber-200">
       <Crown className="h-3.5 w-3.5" />
-      {remaining.toLocaleString()} <span className="hidden sm:inline">Founder spots</span><span className="sm:hidden">left</span>
+      {formatNumber(remaining)} <span className="hidden sm:inline">Founder spots</span><span className="sm:hidden">left</span>
     </Link>
   );
 }

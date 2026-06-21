@@ -1,4 +1,5 @@
 import type { GlobalRankings } from "@/lib/rankings";
+import { formatNumber } from "@/lib/utils";
 
 export const DEMO_USER = {
   id: "demo-user",
@@ -36,7 +37,7 @@ function ranked(valueIndex: 2 | 3, multiplier = 1) {
     founderNumber: index + 1,
     kingdomUnlocked: Number(owned) >= 1000,
     value: Number(valueIndex === 2 ? owned : countries) * multiplier,
-    secondary: valueIndex === 2 ? `${countries} countries` : `${owned.toLocaleString()} hexes`
+    secondary: valueIndex === 2 ? `${countries} countries` : `${formatNumber(owned)} hexes`
   }));
 }
 

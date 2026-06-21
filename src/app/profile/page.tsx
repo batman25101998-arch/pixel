@@ -4,7 +4,7 @@ import { CalendarDays, Globe2, Hexagon, Landmark, ReceiptText, TrendingUp, Walle
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { countryForCoordinates, countryNameForCoordinates } from "@/lib/geography";
-import { money } from "@/lib/utils";
+import { formatNumber, money } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -126,7 +126,7 @@ export default async function ProfilePage() {
             <Hexagon className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-semibold">{ownedHexCount.toLocaleString()}</p>
+            <p className="text-2xl font-semibold">{formatNumber(ownedHexCount)}</p>
           </CardContent>
         </Card>
         <Card>
@@ -135,7 +135,7 @@ export default async function ProfilePage() {
             <Landmark className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-semibold">{user.territories.length.toLocaleString()}</p>
+            <p className="text-2xl font-semibold">{formatNumber(user.territories.length)}</p>
           </CardContent>
         </Card>
         <Card>
@@ -144,7 +144,7 @@ export default async function ProfilePage() {
             <Globe2 className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-semibold">{countries.size.toLocaleString()}</p>
+            <p className="text-2xl font-semibold">{formatNumber(countries.size)}</p>
           </CardContent>
         </Card>
       </div>

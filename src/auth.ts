@@ -9,6 +9,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { DEMO_USER } from "@/lib/demo";
 import { env, isAdminEmail, isDemoMode } from "@/lib/env";
+import { createFounderEligibleUser } from "@/lib/founders";
 
 const credentialsSchema = z.object({
   email: z.string().email(),
@@ -18,7 +19,63 @@ const credentialsSchema = z.object({
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export const googleAuthConfigured = Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET);
-export const appleAuthConfigured = Boolean(env.APPLE_CLIENT_ID && env.APPLE_CLIENT_SECRET);
+export const appleAuthConfigured = Boolean(env.APPLE_ID && env.APPLE_SECRET);
+export const emailAuthConfigured = Boolean(env.EMAIL_FROM && (env.RESEND_API_KEY || env.EMAIL_SERVER));
+
+type MailResult = { rejected?: unknown[]; pending?: unknown[] };
+type MailTransport = { sendMail(message: Record<string, unknown>): Promise<MailResult> };
+type NodemailerModule = { createTransport(server: string): MailTransport };
+
+async function sendVerificationEmail({ identifier, url }: { identifier: string; url: string }) {
+  const host = new URL(url).host;
+  const escapedUrl = url.replaceAll("&", "&amp;").replaceAll('"', "&quot;");
+
+  if (env.RESEND_API_KEY) {
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${env.RESEND_API_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        from: env.EMAIL_FROM!,
+        to: identifier,
+        subject: `Sign in to ${host}`,
+        text: `Sign in to ${host}: ${url}`,
+        html: `<p>Sign in to ${host}</p><p><a href="${escapedUrl}">Continue to Own a Pixel of Earth</a></p>`
+      })
+    });
+    if (!response.ok) {
+      throw new Error(`Resend could not deliver the sign-in email (${response.status}).`);
+    }
+    return;
+  }
+
+  const moduleName = "nodemailer";
+  const { createTransport } = (await import(moduleName)) as NodemailerModule;
+  const transport = createTransport(env.EMAIL_SERVER!);
+  const result = await transport.sendMail({
+    to: identifier,
+    from: env.EMAIL_FROM!,
+    subject: `Sign in to ${host}`,
+    text: `Sign in to ${host}: ${url}`,
+    html: `<p>Sign in to ${host}</p><p><a href="${escapedUrl}">Continue to Own a Pixel of Earth</a></p>`
+  });
+  const failed = [...(result.rejected ?? []), ...(result.pending ?? [])].filter(Boolean);
+  if (failed.length) throw new Error(`Sign-in email could not be delivered to ${identifier}.`);
+}
+
+function emailProvider() {
+  return {
+    id: "email",
+    type: "email" as const,
+    name: "Email",
+    server: env.EMAIL_SERVER!,
+    from: env.EMAIL_FROM!,
+    maxAge: 24 * 60 * 60,
+    sendVerificationRequest: sendVerificationEmail
+  };
+}
 
 function toAdapterUser(user: {
   id: string;
@@ -64,16 +121,14 @@ function authAdapter(): Adapter {
       }
 
       const email = data.email.toLowerCase();
-      const user = await prisma.user.create({
-        data: {
-          email,
-          username: await uniqueUsername(email),
-          displayName: (data.name?.trim() || email.split("@")[0]).slice(0, 48),
-          avatarUrl: data.image,
-          emailVerified: data.emailVerified,
-          role: isAdminEmail(email) ? "ADMIN" : "USER",
-          lastLoginAt: new Date()
-        }
+      const user = await createFounderEligibleUser({
+        email,
+        username: await uniqueUsername(email),
+        displayName: (data.name?.trim() || email.split("@")[0]).slice(0, 48),
+        avatarUrl: data.image,
+        emailVerified: data.emailVerified,
+        role: isAdminEmail(email) ? "ADMIN" : "USER",
+        lastLoginAt: new Date()
       });
       return toAdapterUser(user);
     },
@@ -124,9 +179,12 @@ const oauthProviders = [
     : null,
   appleAuthConfigured
     ? Apple({
-        clientId: env.APPLE_CLIENT_ID!,
-        clientSecret: env.APPLE_CLIENT_SECRET!
+        clientId: env.APPLE_ID!,
+        clientSecret: env.APPLE_SECRET!
       })
+    : null,
+  emailAuthConfigured
+    ? emailProvider()
     : null
 ].filter((provider) => provider !== null);
 

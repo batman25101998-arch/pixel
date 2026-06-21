@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import type { MutableRefObject } from "react";
+import { cellToLatLng, isValidCell } from "h3-js";
 import maplibregl, { Map, type ExpressionSpecification, type StyleSpecification } from "maplibre-gl";
 import { useSession } from "next-auth/react";
 import { DEMO_USER, isClientDemoMode } from "@/lib/demo";
@@ -493,6 +494,27 @@ export function EarthMap() {
 
       void loadHexes();
       void loadTerritories();
+
+      const requestedHex = new URLSearchParams(window.location.search).get("hex");
+      if (requestedHex && isValidCell(requestedHex)) {
+        const [lat, lng] = cellToLatLng(requestedHex);
+        const selection: SelectedHex = { h3Index: requestedHex, lng, lat };
+        setSelectedHex(selection);
+        map.flyTo({
+          center: [lng, lat],
+          zoom: Math.max(map.getZoom(), 5.5),
+          essential: true
+        });
+        if (!isClientDemoMode) {
+          void loadPersistedSelection(selection)
+            .then((persistedSelection) => {
+              if (useMapStore.getState().selectedHex?.h3Index === persistedSelection.h3Index) {
+                setSelectedHex(persistedSelection);
+              }
+            })
+            .catch((error) => console.error("Callback hex lookup failed", error));
+        }
+      }
     });
 
     map.on("moveend", () => {

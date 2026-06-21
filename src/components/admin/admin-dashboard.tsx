@@ -27,7 +27,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { AdminDashboardData } from "@/lib/admin-dashboard";
-import { money } from "@/lib/utils";
+import { formatNumber, money } from "@/lib/utils";
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("en", {
@@ -53,11 +53,11 @@ export function AdminDashboard({ initialData }: { initialData: AdminDashboardDat
   const maxHeat = Math.max(...data.heatmap.map((point) => point.count), 1);
 
   const metrics = useMemo(() => [
-    { label: "Users", value: data.metrics.users.toLocaleString(), icon: Users },
-    { label: "Banned", value: data.metrics.bannedUsers.toLocaleString(), icon: Ban },
-    { label: "Purchased hexes", value: data.metrics.hexes.toLocaleString(), icon: Hexagon },
-    { label: "Territories", value: data.metrics.territories.toLocaleString(), icon: Flag },
-    { label: "Transactions", value: data.metrics.transactions.toLocaleString(), icon: ReceiptText },
+    { label: "Users", value: formatNumber(data.metrics.users), icon: Users },
+    { label: "Banned", value: formatNumber(data.metrics.bannedUsers), icon: Ban },
+    { label: "Purchased hexes", value: formatNumber(data.metrics.hexes), icon: Hexagon },
+    { label: "Territories", value: formatNumber(data.metrics.territories), icon: Flag },
+    { label: "Transactions", value: formatNumber(data.metrics.transactions), icon: ReceiptText },
     { label: "Gross sales", value: money(data.metrics.grossRevenueCents), icon: CircleDollarSign },
     { label: "Platform fees", value: money(data.metrics.platformFeesCents), icon: ShieldCheck },
     { label: "Refunded", value: money(data.metrics.refundedCents), icon: Undo2 }
@@ -208,7 +208,7 @@ export function AdminDashboard({ initialData }: { initialData: AdminDashboardDat
                       </div>
                     </td>
                     <td>{user.role}</td>
-                    <td>{user.ownedHexes.toLocaleString()}</td>
+                    <td>{formatNumber(user.ownedHexes)}</td>
                     <td className={user.bannedAt ? "text-destructive" : "text-emerald-400"}>{user.bannedAt ? "Banned" : "Active"}</td>
                     <td className="w-56 py-2">
                       <Input

@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { isAdminEmail } from "@/lib/env";
+import { createFounderEligibleUser } from "@/lib/founders";
 
 const registerSchema = z.object({
   email: z.string().email(),
@@ -22,16 +23,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Email is already registered." }, { status: 409 });
   }
 
-  const user = await prisma.user.create({
-    data: {
-      email,
-      username: email.split("@")[0],
-      displayName: body.data.displayName,
-      passwordHash: await bcrypt.hash(body.data.password, 12),
-      role: isAdminEmail(email) ? "ADMIN" : "USER"
-    },
-    select: { id: true, email: true, displayName: true, founderNumber: true, kingdomUnlockedAt: true }
+  const user = await createFounderEligibleUser({
+    email,
+    username: email.split("@")[0],
+    displayName: body.data.displayName,
+    passwordHash: await bcrypt.hash(body.data.password, 12),
+    role: isAdminEmail(email) ? "ADMIN" : "USER"
   });
 
-  return NextResponse.json({ user }, { status: 201 });
+  return NextResponse.json({
+    user: {
+      id: user.id,
+      email: user.email,
+      displayName: user.displayName,
+      founderNumber: user.founderNumber,
+      kingdomUnlockedAt: user.kingdomUnlockedAt
+    }
+  }, { status: 201 });
 }
