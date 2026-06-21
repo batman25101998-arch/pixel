@@ -56,10 +56,6 @@ function authAdapter(): Adapter {
   return {
     ...base,
     async createUser(data) {
-      if (!data.email) {
-        throw new Error("Google did not return an email address.");
-      }
-
       const email = data.email.toLowerCase();
       const user = await createFounderEligibleUser({
         email,
@@ -116,7 +112,7 @@ const oauthProviders = googleAuthConfigured
 
 const nextAuth = NextAuth({
   adapter: isDemoMode ? undefined : authAdapter(),
-  secret: env.AUTH_SECRET,
+  secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET ?? env.AUTH_SECRET,
   trustHost: true,
   session: { strategy: "jwt" },
   pages: {

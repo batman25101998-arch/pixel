@@ -2,7 +2,7 @@ import { z } from "zod";
 
 const serverSchema = z.object({
   DATABASE_URL: z.string().min(1),
-  AUTH_SECRET: z.string().min(16),
+  AUTH_SECRET: z.string().min(16).optional(),
   AUTH_URL: z.string().url().optional(),
   NEXTAUTH_URL: z.string().url(),
   NEXT_PUBLIC_APP_URL: z.string().url(),
@@ -25,12 +25,23 @@ export const isDemoMode = process.env.DEMO_MODE === "true";
 
 const vercelHost = process.env.VERCEL_PROJECT_PRODUCTION_URL ?? process.env.VERCEL_URL;
 const deploymentUrl = vercelHost ? `https://${vercelHost}` : "http://localhost:3000";
+const authSecret =
+  process.env.AUTH_SECRET ??
+  process.env.NEXTAUTH_SECRET ??
+  (isDemoMode ? "demo-mode-secret-at-least-32-characters" : undefined);
+const authUrl = process.env.AUTH_URL ?? process.env.NEXTAUTH_URL ?? deploymentUrl;
+
+if (process.env.NODE_ENV === "production" && !authSecret) {
+  console.error(
+    "[auth] Missing AUTH_SECRET or NEXTAUTH_SECRET. Add one of these variables to the Vercel production environment."
+  );
+}
 
 export const env = serverSchema.parse({
   DATABASE_URL: process.env.DATABASE_URL ?? (isDemoMode ? "postgresql://demo:demo@localhost:5432/demo" : undefined),
-  AUTH_SECRET: process.env.NEXTAUTH_SECRET ?? process.env.AUTH_SECRET ?? (isDemoMode ? "demo-mode-secret-at-least-32-characters" : undefined),
-  AUTH_URL: process.env.AUTH_URL,
-  NEXTAUTH_URL: process.env.NEXTAUTH_URL ?? process.env.AUTH_URL ?? deploymentUrl,
+  AUTH_SECRET: authSecret,
+  AUTH_URL: authUrl,
+  NEXTAUTH_URL: authUrl,
   NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL ?? deploymentUrl,
   NEXT_PUBLIC_MAP_STYLE_URL:
     process.env.NEXT_PUBLIC_MAP_STYLE_URL ??
