@@ -2,7 +2,6 @@
 
 import { FormEvent, useState } from "react";
 import Link from "next/link";
-import { Mail } from "lucide-react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -12,29 +11,26 @@ import { Label } from "@/components/ui/label";
 
 type SignInFormProps = {
   googleEnabled: boolean;
-  appleEnabled: boolean;
-  emailEnabled: boolean;
   callbackUrl: string;
 };
 
-type BusyProvider = "google" | "apple" | "credentials" | "email" | null;
+type BusyProvider = "google" | "credentials" | null;
 
-export function SignInForm({ googleEnabled, appleEnabled, emailEnabled, callbackUrl }: SignInFormProps) {
+export function SignInForm({ googleEnabled, callbackUrl }: SignInFormProps) {
   const router = useRouter();
   const [busyProvider, setBusyProvider] = useState<BusyProvider>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [emailSent, setEmailSent] = useState(false);
 
-  async function signInWithProvider(provider: "google" | "apple") {
-    setBusyProvider(provider);
+  async function signInWithGoogle() {
+    setBusyProvider("google");
     setError(null);
     try {
-      await signIn(provider, { callbackUrl });
+      await signIn("google", { callbackUrl });
     } catch {
       setBusyProvider(null);
-      setError(`${provider === "google" ? "Google" : "Apple"} sign-in could not be started.`);
+      setError("Google sign-in could not be started.");
     }
   }
 
@@ -42,7 +38,6 @@ export function SignInForm({ googleEnabled, appleEnabled, emailEnabled, callback
     event.preventDefault();
     setBusyProvider("credentials");
     setError(null);
-    setEmailSent(false);
 
     try {
       const result = await signIn("credentials", {
@@ -64,38 +59,14 @@ export function SignInForm({ googleEnabled, appleEnabled, emailEnabled, callback
     }
   }
 
-  async function sendMagicLink() {
-    if (!emailEnabled || !email.trim()) return;
-    setBusyProvider("email");
-    setError(null);
-    setEmailSent(false);
-    try {
-      const result = await signIn("email", {
-        email: email.trim(),
-        callbackUrl,
-        redirect: false
-      });
-      if (result?.error) setError("The sign-in email could not be sent.");
-      else setEmailSent(true);
-    } catch {
-      setError("The sign-in email could not be sent.");
-    } finally {
-      setBusyProvider(null);
-    }
-  }
-
   return (
     <Card className="w-full max-w-md">
       <CardHeader><CardTitle>Sign in</CardTitle></CardHeader>
       <CardContent className="space-y-5">
         <div className="grid gap-2">
-          <Button type="button" variant="outline" disabled={!googleEnabled || busyProvider !== null} onClick={() => signInWithProvider("google")}>
+          <Button type="button" variant="outline" disabled={!googleEnabled || busyProvider !== null} onClick={signInWithGoogle}>
             <span className="flex h-5 w-5 items-center justify-center rounded-full border border-border text-xs font-bold">G</span>
             {busyProvider === "google" ? "Connecting..." : googleEnabled ? "Continue with Google" : "Google unavailable"}
-          </Button>
-          <Button type="button" variant="outline" disabled={!appleEnabled || busyProvider !== null} onClick={() => signInWithProvider("apple")}>
-            <span className="flex h-5 w-5 items-center justify-center rounded-full border border-border text-xs font-bold">A</span>
-            {busyProvider === "apple" ? "Connecting..." : appleEnabled ? "Continue with Apple" : "Apple coming soon"}
           </Button>
         </div>
 
@@ -113,13 +84,8 @@ export function SignInForm({ googleEnabled, appleEnabled, emailEnabled, callback
           <Button className="w-full" disabled={busyProvider !== null}>
             {busyProvider === "credentials" ? "Signing in..." : "Sign in with email"}
           </Button>
-          <Button className="w-full" type="button" variant="ghost" disabled={!emailEnabled || busyProvider !== null || !email.trim()} onClick={sendMagicLink}>
-            <Mail className="h-4 w-4" />
-            {busyProvider === "email" ? "Sending link..." : emailEnabled ? "Email me a magic link" : "Email magic link coming soon"}
-          </Button>
         </form>
 
-        {emailSent ? <p className="text-sm text-emerald-400">Check your email for a secure sign-in link.</p> : null}
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
         <p className="text-center text-sm text-muted-foreground">
           Don&apos;t have an account? <Link className="font-medium text-primary hover:underline" href={`/register?callbackUrl=${encodeURIComponent(callbackUrl)}`}>Register</Link>

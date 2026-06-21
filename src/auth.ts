@@ -1,11 +1,9 @@
 import NextAuth from "next-auth";
-import Apple from "next-auth/providers/apple";
 import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
 import type { Adapter, AdapterUser } from "next-auth/adapters";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import bcrypt from "bcryptjs";
-import { Resend } from "resend";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { DEMO_USER } from "@/lib/demo";
@@ -20,36 +18,6 @@ const credentialsSchema = z.object({
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export const googleAuthConfigured = Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET);
-export const appleAuthConfigured = Boolean(env.APPLE_ID && env.APPLE_SECRET);
-export const emailAuthConfigured = Boolean(env.EMAIL_FROM && env.RESEND_API_KEY);
-
-async function sendVerificationEmail({ identifier, url }: { identifier: string; url: string }) {
-  const host = new URL(url).host;
-  const escapedUrl = url.replaceAll("&", "&amp;").replaceAll('"', "&quot;");
-
-  const resend = new Resend(env.RESEND_API_KEY!);
-  const { error } = await resend.emails.send({
-    from: env.EMAIL_FROM!,
-    to: identifier,
-    subject: `Sign in to ${host}`,
-    text: `Sign in to ${host}: ${url}`,
-    html: `<p>Sign in to ${host}</p><p><a href="${escapedUrl}">Continue to Own a Pixel of Earth</a></p>`
-  });
-  if (error) {
-    throw new Error(`Resend could not deliver the sign-in email: ${error.message}`);
-  }
-}
-
-function emailProvider() {
-  return {
-    id: "email",
-    type: "email" as const,
-    name: "Email",
-    from: env.EMAIL_FROM!,
-    maxAge: 24 * 60 * 60,
-    sendVerificationRequest: sendVerificationEmail
-  };
-}
 
 function toAdapterUser(user: {
   id: string;
@@ -144,23 +112,9 @@ function authAdapter(): Adapter {
   };
 }
 
-const oauthProviders = [
-  googleAuthConfigured
-    ? Google({
-        clientId: env.GOOGLE_CLIENT_ID!,
-        clientSecret: env.GOOGLE_CLIENT_SECRET!
-      })
-    : null,
-  appleAuthConfigured
-    ? Apple({
-        clientId: env.APPLE_ID!,
-        clientSecret: env.APPLE_SECRET!
-      })
-    : null,
-  emailAuthConfigured
-    ? emailProvider()
-    : null
-].filter((provider) => provider !== null);
+const oauthProviders = googleAuthConfigured
+  ? [Google({ clientId: env.GOOGLE_CLIENT_ID!, clientSecret: env.GOOGLE_CLIENT_SECRET! })]
+  : [];
 
 const nextAuth = NextAuth({
   adapter: isDemoMode ? undefined : authAdapter(),

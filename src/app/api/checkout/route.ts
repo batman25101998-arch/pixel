@@ -62,8 +62,8 @@ export async function POST(request: Request) {
     mode: "payment",
     client_reference_id: payment.id,
     customer_email: session.user.email ?? undefined,
-    success_url: `${env.NEXT_PUBLIC_APP_URL}/?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${env.NEXT_PUBLIC_APP_URL}/?checkout=cancelled`,
+    success_url: `${env.NEXT_PUBLIC_APP_URL}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${env.NEXT_PUBLIC_APP_URL}/checkout/cancel?hex=${encodeURIComponent(parsed.data.h3Index)}`,
     line_items: [
       {
         quantity: 1,

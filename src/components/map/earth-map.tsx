@@ -246,6 +246,8 @@ function hexFillColorExpression(currentUserId: string): ExpressionSpecification 
 function hexFillOpacityExpression(): ExpressionSpecification {
   return [
     "case",
+    ["boolean", ["feature-state", "hover"], false],
+    ["case", ["==", ["get", "status"], "AVAILABLE"], 0.34, 0.86],
     ["==", ["get", "status"], "AVAILABLE"],
     0.22,
     0.75
@@ -255,6 +257,8 @@ function hexFillOpacityExpression(): ExpressionSpecification {
 function hexLineColorExpression(): ExpressionSpecification {
   return [
     "case",
+    ["boolean", ["feature-state", "hover"], false],
+    "#f8fafc",
     ["==", ["get", "status"], "AVAILABLE"],
     "#334155",
     ["==", ["get", "status"], "FOR_SALE"],
@@ -270,6 +274,8 @@ function hexLineColorExpression(): ExpressionSpecification {
 function hexLineOpacityExpression(): ExpressionSpecification {
   return [
     "case",
+    ["boolean", ["feature-state", "hover"], false],
+    1,
     ["==", ["get", "status"], "AVAILABLE"],
     0.8,
     0.8
@@ -412,7 +418,8 @@ export function EarthMap() {
 
       map.addSource(sourceId, {
         type: "geojson",
-        data: { type: "FeatureCollection", features: [] }
+        data: { type: "FeatureCollection", features: [] },
+        promoteId: "h3Index"
       });
       map.addSource(selectedSourceId, {
         type: "geojson",
@@ -442,7 +449,7 @@ export function EarthMap() {
         paint: {
           "line-color": hexLineColorExpression(),
           "line-opacity": hexLineOpacityExpression(),
-          "line-width": 0.6
+          "line-width": ["case", ["boolean", ["feature-state", "hover"], false], 1.1, 0.6]
         }
       });
 
@@ -521,11 +528,25 @@ export function EarthMap() {
       void loadHexes();
     });
 
+    let hoveredFeatureId: string | number | null = null;
+
     map.on("mousemove", fillLayerId, (event) => {
+      const featureId = event.features?.[0]?.id;
+      if (featureId !== undefined && featureId !== hoveredFeatureId) {
+        if (hoveredFeatureId !== null) {
+          map.setFeatureState({ source: sourceId, id: hoveredFeatureId }, { hover: false });
+        }
+        hoveredFeatureId = featureId;
+        map.setFeatureState({ source: sourceId, id: featureId }, { hover: true });
+      }
       map.getCanvas().style.cursor = "pointer";
     });
 
     map.on("mouseleave", fillLayerId, () => {
+      if (hoveredFeatureId !== null) {
+        map.setFeatureState({ source: sourceId, id: hoveredFeatureId }, { hover: false });
+        hoveredFeatureId = null;
+      }
       map.getCanvas().style.cursor = "";
     });
 

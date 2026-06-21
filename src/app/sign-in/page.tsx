@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { appleAuthConfigured, emailAuthConfigured, googleAuthConfigured } from "@/auth";
+import { googleAuthConfigured } from "@/auth";
 import { SignInForm } from "@/components/auth/sign-in-form";
 import { isDemoMode } from "@/lib/env";
 
@@ -18,9 +18,7 @@ export default async function SignInPage({ searchParams }: SignInPageProps) {
   return (
     <div className="flex min-h-[calc(100vh-86px)] items-center justify-center px-4 py-10">
       <SignInForm
-        appleEnabled={appleAuthConfigured}
         callbackUrl={callbackUrl}
-        emailEnabled={emailAuthConfigured}
         googleEnabled={googleAuthConfigured}
       />
     </div>

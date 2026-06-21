@@ -19,10 +19,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid signature." }, { status: 400 });
   }
 
-  if (event.type === "checkout.session.completed") {
+  if (event.type === "checkout.session.completed" || event.type === "checkout.session.async_payment_succeeded") {
     const checkout = event.data.object as Stripe.Checkout.Session;
     const paymentId = checkout.metadata?.paymentId ?? checkout.client_reference_id;
     if (!paymentId) return NextResponse.json({ received: true });
+
+    if (checkout.payment_status !== "paid") {
+      await prisma.payment.updateMany({
+        where: { id: paymentId, status: "REQUIRES_PAYMENT" },
+        data: { status: "PROCESSING", rawEvent: event as object }
+      });
+      return NextResponse.json({ received: true });
+    }
 
     const payment = await prisma.payment.findUnique({ where: { id: paymentId } });
     if (!payment || payment.status === "SUCCEEDED") return NextResponse.json({ received: true });
@@ -95,12 +103,13 @@ export async function POST(request: Request) {
               longitude: center.longitude,
               countryCode,
               ownerId: payment.userId,
-              priceCents: 100,
               title: metadata.title ?? "",
               message: metadata.message ?? "",
               avatarUrl: metadata.avatarUrl,
               imageUrl: metadata.imageUrl,
-              link: metadata.externalLink
+              link: metadata.externalLink,
+              status: "OWNED",
+              priceCents: 100
             }
           });
 
@@ -160,6 +169,17 @@ export async function POST(request: Request) {
       await prisma.payment.updateMany({
         where: { id: paymentId, status: "REQUIRES_PAYMENT" },
         data: { status: "CANCELED", rawEvent: event as object }
+      });
+    }
+  }
+
+  if (event.type === "checkout.session.async_payment_failed") {
+    const checkout = event.data.object as Stripe.Checkout.Session;
+    const paymentId = checkout.metadata?.paymentId ?? checkout.client_reference_id;
+    if (paymentId) {
+      await prisma.payment.updateMany({
+        where: { id: paymentId, status: { in: ["REQUIRES_PAYMENT", "PROCESSING"] } },
+        data: { status: "FAILED", rawEvent: event as object }
       });
     }
   }

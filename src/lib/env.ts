@@ -9,7 +9,6 @@ const serverSchema = z.object({
   NEXT_PUBLIC_MAP_STYLE_URL: z.string().url(),
   STRIPE_SECRET_KEY: z.string().min(1),
   STRIPE_WEBHOOK_SECRET: z.string().min(1),
-  NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: z.string().min(1),
   S3_ENDPOINT: z.string().url(),
   S3_REGION: z.string().min(1),
   S3_BUCKET: z.string().min(1),
@@ -19,11 +18,7 @@ const serverSchema = z.object({
   ADMIN_EMAILS: z.string().default(""),
   HEX_RESOLUTION: z.coerce.number().int().min(0).max(15).default(5),
   GOOGLE_CLIENT_ID: z.string().optional(),
-  GOOGLE_CLIENT_SECRET: z.string().optional(),
-  APPLE_ID: z.string().optional(),
-  APPLE_SECRET: z.string().optional(),
-  EMAIL_FROM: z.string().min(3).optional(),
-  RESEND_API_KEY: z.string().min(1).optional()
+  GOOGLE_CLIENT_SECRET: z.string().optional()
 });
 
 export const isDemoMode = process.env.DEMO_MODE === "true";
@@ -39,8 +34,6 @@ export const env = serverSchema.parse({
     "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
   STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY ?? "sk_test_missing",
   STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET ?? "whsec_missing",
-  NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY:
-    process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? "pk_test_missing",
   S3_ENDPOINT: process.env.S3_ENDPOINT ?? "http://localhost:9000",
   S3_REGION: process.env.S3_REGION ?? "us-east-1",
   S3_BUCKET: process.env.S3_BUCKET ?? "pixel-world",
@@ -50,11 +43,7 @@ export const env = serverSchema.parse({
   ADMIN_EMAILS: process.env.ADMIN_EMAILS ?? "",
   HEX_RESOLUTION: process.env.HEX_RESOLUTION ?? "5",
   GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
-  GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
-  APPLE_ID: process.env.APPLE_ID,
-  APPLE_SECRET: process.env.APPLE_SECRET,
-  EMAIL_FROM: process.env.EMAIL_FROM,
-  RESEND_API_KEY: process.env.RESEND_API_KEY
+  GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET
 });
 
 export const isAdminEmail = (email?: string | null) =>
