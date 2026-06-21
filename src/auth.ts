@@ -15,8 +15,6 @@ const credentialsSchema = z.object({
   password: z.string().min(8)
 });
 
-const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
 export const googleAuthConfigured = Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET);
 
 function toAdapterUser(user: {
@@ -158,7 +156,8 @@ const nextAuth = NextAuth({
   ],
   callbacks: {
     async signIn({ user }) {
-      if (isDemoMode || !user.id || !uuidPattern.test(user.id)) return true;
+      if (isDemoMode) return true;
+      if (!user.id) return true;
       const account = await prisma.user.findUnique({
         where: { id: user.id },
         select: { bannedAt: true }
@@ -179,7 +178,7 @@ const nextAuth = NextAuth({
       }
 
       if (user?.id) token.sub = user.id;
-      if (token.sub && uuidPattern.test(token.sub)) {
+      if (token.sub) {
         try {
           const account = await prisma.user.findUnique({
             where: { id: token.sub },
@@ -231,7 +230,7 @@ const nextAuth = NextAuth({
   },
   events: {
     async signIn({ user, account, profile }) {
-      if (isDemoMode || !user.id || !uuidPattern.test(user.id)) return;
+      if (isDemoMode || !user.id) return;
 
       const profileName = typeof profile?.name === "string" ? profile.name.trim() : "";
       const profileImage =
