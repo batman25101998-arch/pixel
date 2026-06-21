@@ -1,8 +1,10 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import Link from "next/link";
 import { Mail } from "lucide-react";
 import { signIn } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -15,8 +17,13 @@ type SignInFormProps = {
   callbackUrl: string;
 };
 
+type BusyProvider = "google" | "apple" | "credentials" | "email" | null;
+
 export function SignInForm({ googleEnabled, appleEnabled, emailEnabled, callbackUrl }: SignInFormProps) {
-  const [busyProvider, setBusyProvider] = useState<"google" | "apple" | "email" | null>(null);
+  const router = useRouter();
+  const [busyProvider, setBusyProvider] = useState<BusyProvider>(null);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [emailSent, setEmailSent] = useState(false);
 
@@ -31,27 +38,45 @@ export function SignInForm({ googleEnabled, appleEnabled, emailEnabled, callback
     }
   }
 
-  async function signInWithEmail(event: FormEvent<HTMLFormElement>) {
+  async function signInWithPassword(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!emailEnabled) return;
+    setBusyProvider("credentials");
+    setError(null);
+    setEmailSent(false);
 
-    const email = String(new FormData(event.currentTarget).get("email") ?? "").trim();
-    if (!email) return;
+    try {
+      const result = await signIn("credentials", {
+        email: email.trim(),
+        password,
+        callbackUrl,
+        redirect: false
+      });
+      if (result?.error) {
+        setError("Email or password is incorrect.");
+        return;
+      }
+      router.push(callbackUrl);
+      router.refresh();
+    } catch {
+      setError("Sign-in could not be completed.");
+    } finally {
+      setBusyProvider(null);
+    }
+  }
 
+  async function sendMagicLink() {
+    if (!emailEnabled || !email.trim()) return;
     setBusyProvider("email");
     setError(null);
     setEmailSent(false);
     try {
       const result = await signIn("email", {
-        email,
+        email: email.trim(),
         callbackUrl,
         redirect: false
       });
-      if (result?.error) {
-        setError("The sign-in email could not be sent.");
-      } else {
-        setEmailSent(true);
-      }
+      if (result?.error) setError("The sign-in email could not be sent.");
+      else setEmailSent(true);
     } catch {
       setError("The sign-in email could not be sent.");
     } finally {
@@ -61,60 +86,44 @@ export function SignInForm({ googleEnabled, appleEnabled, emailEnabled, callback
 
   return (
     <Card className="w-full max-w-md">
-      <CardHeader>
-        <CardTitle>Sign in</CardTitle>
-      </CardHeader>
+      <CardHeader><CardTitle>Sign in</CardTitle></CardHeader>
       <CardContent className="space-y-5">
         <div className="grid gap-2">
-          <Button
-            className="w-full"
-            type="button"
-            variant="outline"
-            disabled={!googleEnabled || busyProvider !== null}
-            onClick={() => signInWithProvider("google")}
-          >
+          <Button type="button" variant="outline" disabled={!googleEnabled || busyProvider !== null} onClick={() => signInWithProvider("google")}>
             <span className="flex h-5 w-5 items-center justify-center rounded-full border border-border text-xs font-bold">G</span>
             {busyProvider === "google" ? "Connecting..." : googleEnabled ? "Continue with Google" : "Google unavailable"}
           </Button>
-          <Button
-            className="w-full"
-            type="button"
-            variant="outline"
-            disabled={!appleEnabled || busyProvider !== null}
-            onClick={() => signInWithProvider("apple")}
-          >
+          <Button type="button" variant="outline" disabled={!appleEnabled || busyProvider !== null} onClick={() => signInWithProvider("apple")}>
             <span className="flex h-5 w-5 items-center justify-center rounded-full border border-border text-xs font-bold">A</span>
-            {busyProvider === "apple" ? "Connecting..." : appleEnabled ? "Continue with Apple" : "Continue with Apple - Coming soon"}
+            {busyProvider === "apple" ? "Connecting..." : appleEnabled ? "Continue with Apple" : "Apple coming soon"}
           </Button>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="h-px flex-1 bg-border" />
-          <span className="text-xs uppercase tracking-wide text-muted-foreground">or</span>
-          <div className="h-px flex-1 bg-border" />
-        </div>
+        <div className="flex items-center gap-3"><div className="h-px flex-1 bg-border" /><span className="text-xs uppercase tracking-wide text-muted-foreground">or</span><div className="h-px flex-1 bg-border" /></div>
 
-        <form className="space-y-3" onSubmit={signInWithEmail}>
+        <form className="space-y-3" onSubmit={signInWithPassword}>
           <div className="space-y-1.5">
-            <Label htmlFor="magic-link-email">Email</Label>
-            <Input
-              id="magic-link-email"
-              name="email"
-              type="email"
-              autoComplete="email"
-              placeholder="you@example.com"
-              required
-              disabled={!emailEnabled || busyProvider !== null}
-            />
+            <Label htmlFor="sign-in-email">Email</Label>
+            <Input id="sign-in-email" type="email" autoComplete="email" required value={email} onChange={(event) => setEmail(event.target.value)} />
           </div>
-          <Button className="w-full" disabled={!emailEnabled || busyProvider !== null}>
+          <div className="space-y-1.5">
+            <Label htmlFor="sign-in-password">Password</Label>
+            <Input id="sign-in-password" type="password" autoComplete="current-password" minLength={8} required value={password} onChange={(event) => setPassword(event.target.value)} />
+          </div>
+          <Button className="w-full" disabled={busyProvider !== null}>
+            {busyProvider === "credentials" ? "Signing in..." : "Sign in with email"}
+          </Button>
+          <Button className="w-full" type="button" variant="ghost" disabled={!emailEnabled || busyProvider !== null || !email.trim()} onClick={sendMagicLink}>
             <Mail className="h-4 w-4" />
-            {busyProvider === "email" ? "Sending link..." : emailEnabled ? "Continue with Email" : "Email coming soon"}
+            {busyProvider === "email" ? "Sending link..." : emailEnabled ? "Email me a magic link" : "Email magic link coming soon"}
           </Button>
         </form>
 
         {emailSent ? <p className="text-sm text-emerald-400">Check your email for a secure sign-in link.</p> : null}
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
+        <p className="text-center text-sm text-muted-foreground">
+          Don&apos;t have an account? <Link className="font-medium text-primary hover:underline" href={`/register?callbackUrl=${encodeURIComponent(callbackUrl)}`}>Register</Link>
+        </p>
       </CardContent>
     </Card>
   );
