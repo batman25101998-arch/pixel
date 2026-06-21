@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { gridDisk } from "h3-js";
 import { auth } from "@/auth";
+import { finalizeCheckoutSession } from "@/lib/finalize-checkout";
 import { prisma } from "@/lib/prisma";
+import { stripe } from "@/lib/stripe";
 
 type PaymentMetadata = {
   h3Index?: string;
@@ -19,7 +21,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Stripe checkout session id is required." }, { status: 400 });
   }
 
-  const payment = await prisma.payment.findFirst({
+  const paymentQuery = {
     where: {
       providerCheckoutId: sessionId,
       userId: session.user.id
@@ -43,11 +45,27 @@ export async function GET(request: Request) {
         }
       }
     }
-  });
+  } as const;
+
+  let payment = await prisma.payment.findFirst(paymentQuery);
 
   if (!payment) {
     return NextResponse.json({ status: "PENDING" });
   }
+
+  if (payment.status !== "SUCCEEDED") {
+    try {
+      const checkout = await stripe.checkout.sessions.retrieve(sessionId);
+      if (checkout.payment_status === "paid") {
+        await finalizeCheckoutSession(checkout);
+        payment = await prisma.payment.findFirst(paymentQuery);
+      }
+    } catch (error) {
+      console.error("Stripe checkout confirmation failed", error);
+    }
+  }
+
+  if (!payment) return NextResponse.json({ status: "PENDING" });
 
   const metadata = payment.metadata as PaymentMetadata;
   const hex =

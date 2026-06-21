@@ -57,7 +57,7 @@ export function CheckoutSuccess({ sessionId }: { sessionId: string }) {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           {completed ? <CheckCircle2 className="h-6 w-6 text-emerald-400" /> : <Loader2 className="h-6 w-6 animate-spin text-primary" />}
-          {completed ? "Your hex is yours" : failed ? "Payment not completed" : "Confirming your purchase"}
+          {completed ? "Purchase confirmed" : failed ? "Payment not completed" : "Confirming your purchase"}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-5">
