@@ -23,13 +23,16 @@ const serverSchema = z.object({
 
 export const isDemoMode = process.env.DEMO_MODE === "true";
 
-const vercelHost = process.env.VERCEL_PROJECT_PRODUCTION_URL ?? process.env.VERCEL_URL;
-const deploymentUrl = vercelHost ? `https://${vercelHost}` : "http://localhost:3000";
+const configuredAuthUrl = process.env.AUTH_URL ?? process.env.NEXTAUTH_URL;
+const canonicalAppUrl = process.env.NEXT_PUBLIC_APP_URL ?? configuredAuthUrl ?? "http://localhost:3000";
 const authSecret =
   process.env.AUTH_SECRET ??
   process.env.NEXTAUTH_SECRET ??
   (isDemoMode ? "demo-mode-secret-at-least-32-characters" : undefined);
-const authUrl = process.env.AUTH_URL ?? process.env.NEXTAUTH_URL ?? deploymentUrl;
+
+// Auth.js must start OAuth and receive its callback on the same canonical host.
+process.env.AUTH_URL = canonicalAppUrl;
+process.env.NEXTAUTH_URL = canonicalAppUrl;
 
 if (process.env.NODE_ENV === "production" && !authSecret) {
   console.error(
@@ -40,9 +43,9 @@ if (process.env.NODE_ENV === "production" && !authSecret) {
 export const env = serverSchema.parse({
   DATABASE_URL: process.env.DATABASE_URL ?? (isDemoMode ? "postgresql://demo:demo@localhost:5432/demo" : undefined),
   AUTH_SECRET: authSecret,
-  AUTH_URL: authUrl,
-  NEXTAUTH_URL: authUrl,
-  NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL ?? deploymentUrl,
+  AUTH_URL: process.env.AUTH_URL ?? process.env.NEXTAUTH_URL,
+  NEXTAUTH_URL: process.env.AUTH_URL ?? process.env.NEXTAUTH_URL,
+  NEXT_PUBLIC_APP_URL: canonicalAppUrl,
   NEXT_PUBLIC_MAP_STYLE_URL:
     process.env.NEXT_PUBLIC_MAP_STYLE_URL ??
     "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
