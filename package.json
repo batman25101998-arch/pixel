@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:grant-zagreb": "node scripts/dev-grant-zagreb-hexes.mjs",
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "next lint",

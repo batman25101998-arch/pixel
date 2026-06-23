@@ -1,92 +1,159 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { Search } from "lucide-react";
+import { isValidCell } from "h3-js";
+import { Loader2, MapPin, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useMapStore } from "@/stores/map-store";
 import { isClientDemoMode, DEMO_USER } from "@/lib/demo";
-import { searchDemo } from "@/lib/demo-storage";
+import { searchDemo, type DemoSearchResult } from "@/lib/demo-storage";
+
+type SearchResult = {
+  type: "hex" | "user" | "territory" | "geocode";
+  label: string;
+  latitude: number;
+  longitude: number;
+  zoom: number;
+  h3Index?: string;
+  bbox?: [number, number, number, number];
+  properties?: Record<string, string | number | boolean | null>;
+};
+
+function resultFromDemo(result: DemoSearchResult): SearchResult {
+  const hex = result.hex;
+  return {
+    type: result.type,
+    label: result.label,
+    h3Index: result.h3Index,
+    latitude: result.latitude,
+    longitude: result.longitude,
+    zoom: result.type === "hex" ? 13 : 9,
+    properties: hex ? {
+      id: hex.id,
+      ownerName: hex.ownerName,
+      ownerImage: hex.avatarUrl,
+      title: hex.title,
+      message: result.territory?.description || hex.message,
+      imageUrl: result.territory?.bannerImageUrl || result.territory?.flagImageUrl || hex.imageUrl,
+      externalLink: hex.externalLink,
+      status: hex.ownerId === DEMO_USER.id ? "MY_OWNED" : hex.forSale ? "FOR_SALE" : "OWNED",
+      priceCents: hex.salePriceCents ?? hex.priceCents
+    } : undefined
+  };
+}
 
 export function SearchBar() {
   const [query, setQuery] = useState("");
+  const [results, setResults] = useState<SearchResult[]>([]);
+  const [activeLabel, setActiveLabel] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
   const setSelectedHex = useMapStore((state) => state.setSelectedHex);
   const focusMap = useMapStore((state) => state.focusMap);
 
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    setError(null);
-    if (isClientDemoMode) {
-      const result = searchDemo(query)[0];
-      if (!result) {
-        setError("No demo result found.");
-        return;
-      }
-      const hex = result.hex;
+  function selectResult(result: SearchResult) {
+    const properties = result.properties;
+    if (result.type === "hex" && result.h3Index) {
       setSelectedHex({
         h3Index: result.h3Index,
         lng: result.longitude,
         lat: result.latitude,
-        purchased: hex ? {
-          id: hex.id,
-          ownerName: hex.ownerName,
-          ownerImage: hex.avatarUrl,
-          title: hex.title,
-          message: result.territory?.description || hex.message,
-          imageUrl: result.territory?.bannerImageUrl || result.territory?.flagImageUrl || hex.imageUrl,
-          externalLink: hex.externalLink,
-          status: hex.ownerId === DEMO_USER.id ? "MY_OWNED" : hex.forSale ? "FOR_SALE" : "OWNED",
-          priceCents: hex.salePriceCents ?? hex.priceCents
+        purchased: properties && properties.status !== "AVAILABLE" ? {
+          id: String(properties.id ?? result.h3Index),
+          ownerName: String(properties.ownerName ?? "Anonymous owner"),
+          ownerImage: properties.ownerImage ? String(properties.ownerImage) : null,
+          ownerFounderNumber: properties.ownerFounderNumber ? Number(properties.ownerFounderNumber) : null,
+          ownerKingdomUnlocked: Boolean(properties.ownerKingdomUnlocked),
+          title: properties.title ? String(properties.title) : "",
+          message: properties.message ? String(properties.message) : "",
+          imageUrl: properties.imageUrl ? String(properties.imageUrl) : null,
+          externalLink: properties.externalLink ? String(properties.externalLink) : null,
+          status: properties.status ? String(properties.status) : "OWNED",
+          priceCents: Number(properties.priceCents ?? 100)
         } : undefined
       });
-      focusMap(result.longitude, result.latitude);
+    } else {
+      setSelectedHex(null);
+    }
+
+    focusMap(result.longitude, result.latitude, {
+      zoom: result.zoom,
+      bbox: result.bbox,
+      label: result.label
+    });
+    setActiveLabel(result.label);
+    setResults([]);
+    setError(null);
+  }
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    const normalized = query.trim();
+    setError(null);
+    setResults([]);
+    if (!normalized) {
+      setError("Enter a hex, player, territory, country, city, or coordinates.");
       return;
     }
-    const coordinateMatch = query.match(/^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/);
-    const params = coordinateMatch
-      ? `lng=${coordinateMatch[1]}&lat=${coordinateMatch[2]}`
-      : `q=${encodeURIComponent(query)}`;
-    const response = await fetch(`/api/search?${params}`);
-    const data = await response.json();
-    const feature = data.results?.[0];
-    if (feature) {
-      setSelectedHex({
-        h3Index: feature.properties.h3Index,
-        lng: feature.properties.longitude,
-        lat: feature.properties.latitude,
-        purchased: {
-          id: feature.properties.id,
-          ownerName: feature.properties.ownerName,
-          ownerImage: feature.properties.ownerImage,
-          ownerFounderNumber: feature.properties.ownerFounderNumber,
-          ownerKingdomUnlocked: feature.properties.ownerKingdomUnlocked,
-          title: feature.properties.title,
-          message: feature.properties.message,
-          imageUrl: feature.properties.imageUrl,
-          externalLink: feature.properties.externalLink,
-          status: feature.properties.status,
-          priceCents: feature.properties.priceCents
-        }
-      });
-      focusMap(feature.properties.longitude, feature.properties.latitude);
-    } else if (data.h3Index && coordinateMatch) {
-      setSelectedHex({
-        h3Index: data.h3Index,
-        lng: Number(coordinateMatch[1]),
-        lat: Number(coordinateMatch[2])
-      });
-      focusMap(Number(coordinateMatch[1]), Number(coordinateMatch[2]));
-    } else {
-      setError("No result found.");
+
+    const coordinateQuery = /^\s*-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?\s*$/.test(normalized);
+    if (isClientDemoMode) {
+      const demoResults = searchDemo(normalized).map(resultFromDemo);
+      if (demoResults.length) {
+        if (isValidCell(normalized) || coordinateQuery || demoResults.length === 1) selectResult(demoResults[0]);
+        else setResults(demoResults);
+        return;
+      }
+    }
+
+    setLoading(true);
+    try {
+      const response = await fetch(`/api/search?q=${encodeURIComponent(normalized)}`, { cache: "no-store" });
+      if (!response.ok) throw new Error("Search request failed.");
+      const data = (await response.json()) as { results?: SearchResult[] };
+      const nextResults = data.results ?? [];
+      if (!nextResults.length) {
+        setError("No results found.");
+      } else if (isValidCell(normalized) || coordinateQuery || nextResults.length === 1) {
+        selectResult(nextResults[0]);
+      } else {
+        setResults(nextResults);
+      }
+    } catch {
+      setError("Search is temporarily unavailable.");
+    } finally {
+      setLoading(false);
     }
   }
 
   return (
-    <form onSubmit={submit} className="absolute left-4 top-4 z-20 flex w-[min(460px,calc(100vw-2rem))] flex-wrap gap-2 rounded-lg border border-border bg-card/95 p-2 shadow-xl backdrop-blur">
-      <Input className="min-w-0 flex-1" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Hex, lng,lat, Demo User, or kingdom" />
-      <Button type="submit" size="icon" aria-label="Search"><Search className="h-4 w-4" /></Button>
-      {error ? <p className="w-full px-1 text-xs text-destructive">{error}</p> : null}
-    </form>
+    <div className="absolute left-4 top-4 z-20 w-[min(500px,calc(100vw-2rem))]">
+      <form onSubmit={submit} className="flex flex-wrap gap-2 rounded-lg border border-border bg-card/95 p-2 shadow-xl backdrop-blur">
+        <Input className="min-w-0 flex-1" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Hex, player, territory, city, country, or lat,lng" aria-label="Search the world map" />
+        <Button type="submit" size="icon" aria-label="Search" disabled={loading}>
+          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+        </Button>
+        {activeLabel && !error ? <p className="flex w-full items-center gap-1.5 px-1 text-xs text-cyan-200"><MapPin className="h-3.5 w-3.5" />{activeLabel}</p> : null}
+        {error ? <p className="w-full px-1 text-xs text-destructive">{error}</p> : null}
+      </form>
+
+      {results.length ? (
+        <div className="mt-2 overflow-hidden rounded-lg border border-border bg-card/98 shadow-2xl backdrop-blur">
+          {results.map((result, index) => (
+            <button
+              key={`${result.type}-${result.label}-${index}`}
+              type="button"
+              className="flex w-full items-start gap-3 border-b border-border/70 px-4 py-3 text-left transition-colors last:border-0 hover:bg-accent"
+              onClick={() => selectResult(result)}
+            >
+              <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-cyan-300" />
+              <span className="min-w-0"><span className="block text-sm font-medium">{result.label}</span><span className="mt-0.5 block text-xs capitalize text-muted-foreground">{result.type === "geocode" ? "OpenStreetMap place" : result.type}</span></span>
+            </button>
+          ))}
+          {results.some((result) => result.type === "geocode") ? <p className="border-t border-border px-4 py-2 text-[10px] text-muted-foreground">Search data © OpenStreetMap contributors</p> : null}
+        </div>
+      ) : null}
+    </div>
   );
 }

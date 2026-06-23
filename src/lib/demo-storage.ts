@@ -193,8 +193,8 @@ export function searchDemo(query: string): DemoSearchResult[] {
   if (!normalized) return [];
   const coordinateMatch = normalized.match(/^(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)$/);
   if (coordinateMatch) {
-    const longitude = Number(coordinateMatch[1]);
-    const latitude = Number(coordinateMatch[2]);
+    const latitude = Number(coordinateMatch[1]);
+    const longitude = Number(coordinateMatch[2]);
     if (longitude >= -180 && longitude <= 180 && latitude >= -90 && latitude <= 90) {
       return [resultForCell(latLngToCell(latitude, longitude, 5), `${longitude}, ${latitude}`)];
     }

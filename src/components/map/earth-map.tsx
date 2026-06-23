@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import type { MutableRefObject } from "react";
-import { cellToLatLng, isValidCell } from "h3-js";
+import { useEffect, useRef, useState } from "react";
+import { cellToBoundary, cellToLatLng, isValidCell } from "h3-js";
 import maplibregl, { Map, type ExpressionSpecification, type StyleSpecification } from "maplibre-gl";
 import { useSession } from "next-auth/react";
+import { Check, Layers3 } from "lucide-react";
 import { DEMO_USER, isClientDemoMode } from "@/lib/demo";
 import { getDemoOwnedHexes, getDemoTerritories } from "@/lib/demo-storage";
 import { useMapStore, type SelectedHex } from "@/stores/map-store";
@@ -15,9 +15,27 @@ const territorySourceId = "earth-territories";
 const fillLayerId = "earth-hexes-fill";
 const outlineLayerId = "earth-hexes-outline";
 const territoryFillLayerId = "earth-territories-fill";
+const territoryOutlineLayerId = "earth-territories-outline";
 const territoryLineLayerId = "earth-territories-line";
 const selectedFillLayerId = "earth-hex-selected-fill";
 const selectedLineLayerId = "earth-hex-selected-line";
+type LayerVisibility = {
+  images: boolean;
+  territories: boolean;
+  hexGrid: boolean;
+  kingdomBorders: boolean;
+};
+
+function applyLayerVisibility(map: Map, visibility: LayerVisibility) {
+  const setVisibility = (layerIds: string[], visible: boolean) => {
+    for (const layerId of layerIds) {
+      if (map.getLayer(layerId)) map.setLayoutProperty(layerId, "visibility", visible ? "visible" : "none");
+    }
+  };
+  setVisibility([territoryFillLayerId, territoryOutlineLayerId], visibility.territories);
+  setVisibility([fillLayerId, outlineLayerId], visibility.hexGrid);
+  setVisibility([territoryLineLayerId], visibility.kingdomBorders);
+}
 
 const darkMapStyle: string | StyleSpecification =
   process.env.NEXT_PUBLIC_MAP_STYLE_URL ??
@@ -282,52 +300,108 @@ function hexLineOpacityExpression(): ExpressionSpecification {
   ] as ExpressionSpecification;
 }
 
-function renderImageMarkers(
-  map: Map,
-  markerStore: MutableRefObject<maplibregl.Marker[]>,
-  selectHex: (hex: SelectedHex | null) => void,
-  data: GeoJSON.FeatureCollection<GeoJSON.Polygon>
-) {
-  markerStore.current.forEach((marker) => marker.remove());
-  markerStore.current = [];
-  if (map.getZoom() < 6) return;
-  const bounds = map.getBounds();
+type ImagePointCollection = GeoJSON.FeatureCollection<GeoJSON.Point, Record<string, unknown>>;
+type CustomImageTile = {
+  element: HTMLButtonElement;
+  h3Index: string;
+  marker: maplibregl.Marker;
+};
 
-  for (const feature of data.features) {
-    const properties = feature.properties as Record<string, unknown> | null;
-    const imageUrl = properties?.imageUrl ? String(properties.imageUrl) : "";
-    const longitude = Number(properties?.longitude);
-    const latitude = Number(properties?.latitude);
-    if (!imageUrl || !Number.isFinite(longitude) || !Number.isFinite(latitude) || !bounds.contains([longitude, latitude])) continue;
+function demoImageCollection(): ImagePointCollection {
+  return {
+    type: "FeatureCollection",
+    features: getDemoOwnedHexes().flatMap((hex) => {
+      if (!hex.imageUrl) return [];
+      return [{
+        type: "Feature" as const,
+        id: hex.h3Index,
+        geometry: { type: "Point" as const, coordinates: [hex.longitude, hex.latitude] },
+        properties: {
+          id: hex.id,
+          h3Index: hex.h3Index,
+          latitude: hex.latitude,
+          longitude: hex.longitude,
+          ownerId: hex.ownerId,
+          ownerName: hex.ownerName,
+          ownerImage: hex.avatarUrl,
+          title: hex.title,
+          message: hex.message,
+          imageUrl: hex.imageUrl,
+          externalLink: hex.externalLink,
+          status: "MY_OWNED",
+          priceCents: hex.priceCents
+        }
+      }];
+    })
+  };
+}
+
+async function customImageCollectionForMap(map: Map) {
+  if (isClientDemoMode) return demoImageCollection();
+  const bounds = map.getBounds();
+  const bbox = [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()].join(",");
+  const response = await fetch(`/api/map-images?bbox=${bbox}`, { cache: "no-store" });
+  if (!response.ok) throw new Error("Custom hex images could not be loaded.");
+  return (await response.json()) as ImagePointCollection;
+}
+
+function clearCustomImageTiles(tiles: CustomImageTile[]) {
+  for (const tile of tiles) tile.marker.remove();
+  tiles.length = 0;
+}
+
+function resizeCustomImageTile(map: Map, tile: CustomImageTile) {
+  const projected = cellToBoundary(tile.h3Index).map(([lat, lng]) => map.project([lng, lat]));
+  const xs = projected.map((point) => point.x);
+  const ys = projected.map((point) => point.y);
+  const width = Math.max(1, Math.max(...xs) - Math.min(...xs));
+  const height = Math.max(1, Math.max(...ys) - Math.min(...ys));
+  tile.element.style.width = `${width}px`;
+  tile.element.style.height = `${height}px`;
+  const zoomProgress = Math.max(0, Math.min(1, (map.getZoom() - 1.2) / 8.8));
+  tile.element.style.setProperty("--hex-image-opacity", String(0.65 + zoomProgress * 0.35));
+}
+
+function renderCustomImageTiles(
+  map: Map,
+  tiles: CustomImageTile[],
+  data: ImagePointCollection,
+  visible: boolean,
+  selectHex: (hex: SelectedHex | null) => void
+) {
+  clearCustomImageTiles(tiles);
+  if (!visible) return;
+
+  for (const feature of data.features.slice(0, 300)) {
+    const properties = feature.properties ?? {};
+    const imageUrl = properties.imageUrl ? String(properties.imageUrl) : "";
+    const h3Index = properties.h3Index ? String(properties.h3Index) : "";
+    if (!imageUrl || !isValidCell(h3Index)) continue;
+
     const element = document.createElement("button");
     element.type = "button";
-    element.className = "demo-hex-thumbnail";
-    element.title = String(properties?.title || "Open collectible hex");
+    element.className = "custom-hex-image-tile";
+    element.title = properties.title ? String(properties.title) : "Open collectible hex";
+
     const image = document.createElement("img");
+    image.className = "custom-hex-image-tile__image";
     image.src = imageUrl;
-    image.alt = "";
+    image.alt = properties.title ? String(properties.title) : "Custom hex image";
+    image.loading = "lazy";
+    image.decoding = "async";
+    image.referrerPolicy = "no-referrer";
     element.appendChild(image);
+
     element.addEventListener("click", (event) => {
       event.stopPropagation();
-      selectHex({
-        h3Index: String(properties?.h3Index),
-        lng: longitude,
-        lat: latitude,
-        purchased: {
-          id: String(properties?.id),
-          ownerName: String(properties?.ownerName || "Anonymous owner"),
-          ownerImage: properties?.ownerImage ? String(properties.ownerImage) : null,
-          title: String(properties?.title || ""),
-          message: String(properties?.message || ""),
-          imageUrl,
-          externalLink: properties?.externalLink ? String(properties.externalLink) : null,
-          status: String(properties?.status || "OWNED"),
-          priceCents: Number(properties?.priceCents ?? 100)
-        }
-      });
-      map.flyTo({ center: [longitude, latitude], zoom: Math.max(map.getZoom(), 6), essential: true });
+      selectHex(selectedHexFromProperties(properties as Record<string, string | number | null>));
     });
-    markerStore.current.push(new maplibregl.Marker({ element, anchor: "center" }).setLngLat([longitude, latitude]).addTo(map));
+
+    const coordinates = feature.geometry.coordinates as [number, number];
+    const marker = new maplibregl.Marker({ element, anchor: "center" }).setLngLat(coordinates).addTo(map);
+    const tile = { element, h3Index, marker };
+    resizeCustomImageTile(map, tile);
+    tiles.push(tile);
   }
 }
 
@@ -336,8 +410,17 @@ export function EarthMap() {
   const currentUserId = isClientDemoMode ? DEMO_USER.id : session?.user?.id ?? "";
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<Map | null>(null);
-  const imageMarkersRef = useRef<maplibregl.Marker[]>([]);
+  const searchMarkerRef = useRef<maplibregl.Marker | null>(null);
+  const customImageTilesRef = useRef<CustomImageTile[]>([]);
   const requestRef = useRef(0);
+  const imageRequestRef = useRef(0);
+  const [layerVisibility, setLayerVisibility] = useState<LayerVisibility>({
+    images: true,
+    territories: true,
+    hexGrid: true,
+    kingdomBorders: true
+  });
+  const layerVisibilityRef = useRef(layerVisibility);
   const setSelectedHex = useMapStore((state) => state.setSelectedHex);
   const selectedHex = useMapStore((state) => state.selectedHex);
   const refreshToken = useMapStore((state) => state.refreshToken);
@@ -392,7 +475,6 @@ export function EarthMap() {
         const source = map.getSource(sourceId) as maplibregl.GeoJSONSource;
         const decorated = applyDemoOwnership(data);
         source.setData(decorated);
-        renderImageMarkers(map, imageMarkersRef, setSelectedHex, decorated);
       } catch (error) {
         console.error("/api/hexes load failed", error);
       }
@@ -409,6 +491,23 @@ export function EarthMap() {
         source.setData(data.geojson);
       } catch (error) {
         console.error("/api/territories load failed", error);
+      }
+    }
+
+    async function loadCustomImageTiles() {
+      const requestId = ++imageRequestRef.current;
+      if (!layerVisibilityRef.current.images) {
+        clearCustomImageTiles(customImageTilesRef.current);
+        return;
+      }
+
+      try {
+        const data = await customImageCollectionForMap(map);
+        if (requestId !== imageRequestRef.current) return;
+        renderCustomImageTiles(map, customImageTilesRef.current, data, layerVisibilityRef.current.images, setSelectedHex);
+      } catch (error) {
+        console.error("Custom hex image refresh failed", error);
+        clearCustomImageTiles(customImageTilesRef.current);
       }
     }
 
@@ -429,7 +528,6 @@ export function EarthMap() {
         type: "geojson",
         data: { type: "FeatureCollection", features: [] }
       });
-
       map.addLayer({
         id: fillLayerId,
         source: sourceId,
@@ -465,10 +563,23 @@ export function EarthMap() {
       });
 
       map.addLayer({
+        id: territoryOutlineLayerId,
+        source: territorySourceId,
+        type: "line",
+        minzoom: 0,
+        paint: {
+          "line-color": ["coalesce", ["get", "color"], "#22c55e"],
+          "line-opacity": 0.45,
+          "line-width": 1
+        }
+      });
+
+      map.addLayer({
         id: territoryLineLayerId,
         source: territorySourceId,
         type: "line",
         minzoom: 0,
+        filter: ["in", ["get", "level"], ["literal", ["KINGDOM", "EMPIRE"]]],
         paint: {
           "line-color": ["coalesce", ["get", "color"], "#22c55e"],
           "line-opacity": 0.95,
@@ -499,8 +610,11 @@ export function EarthMap() {
         }
       });
 
+      applyLayerVisibility(map, layerVisibilityRef.current);
+
       void loadHexes();
       void loadTerritories();
+      void loadCustomImageTiles();
 
       const requestedHex = new URLSearchParams(window.location.search).get("hex");
       if (requestedHex && isValidCell(requestedHex)) {
@@ -526,6 +640,11 @@ export function EarthMap() {
 
     map.on("moveend", () => {
       void loadHexes();
+      void loadCustomImageTiles();
+    });
+
+    map.on("zoom", () => {
+      for (const tile of customImageTilesRef.current) resizeCustomImageTile(map, tile);
     });
 
     let hoveredFeatureId: string | number | null = null;
@@ -600,7 +719,8 @@ export function EarthMap() {
     });
 
     return () => {
-      imageMarkersRef.current.forEach((marker) => marker.remove());
+      clearCustomImageTiles(customImageTilesRef.current);
+      searchMarkerRef.current?.remove();
       map.remove();
       mapRef.current = null;
     };
@@ -646,11 +766,21 @@ export function EarthMap() {
         const source = map.getSource(sourceId) as maplibregl.GeoJSONSource;
         const decorated = applyDemoOwnership(data);
         source.setData(decorated);
-        renderImageMarkers(map, imageMarkersRef, setSelectedHex, decorated);
       })
       .catch((error) => {
         console.error("/api/hexes refresh failed", error);
       });
+    if (layerVisibilityRef.current.images) {
+      const requestId = ++imageRequestRef.current;
+      void customImageCollectionForMap(map)
+        .then((data) => {
+          if (requestId !== imageRequestRef.current) return;
+          renderCustomImageTiles(map, customImageTilesRef.current, data, true, setSelectedHex);
+        })
+        .catch((error) => console.error("Custom hex image refresh failed", error));
+    } else {
+      clearCustomImageTiles(customImageTilesRef.current);
+    }
     if (isClientDemoMode) return;
     fetch("/api/territories")
       .then((response) => response.json())
@@ -662,21 +792,82 @@ export function EarthMap() {
       .catch((error) => {
         console.error("/api/territories refresh failed", error);
       });
-  }, [refreshToken]);
+  }, [currentUserId, refreshToken]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    layerVisibilityRef.current = layerVisibility;
+    if (map?.isStyleLoaded()) applyLayerVisibility(map, layerVisibility);
+    if (!map) return;
+    if (!layerVisibility.images) {
+      clearCustomImageTiles(customImageTilesRef.current);
+      return;
+    }
+    const requestId = ++imageRequestRef.current;
+    void customImageCollectionForMap(map)
+      .then((data) => {
+        if (requestId !== imageRequestRef.current) return;
+        renderCustomImageTiles(map, customImageTilesRef.current, data, true, setSelectedHex);
+      })
+      .catch((error) => console.error("Custom hex image refresh failed", error));
+  }, [layerVisibility, setSelectedHex]);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !focusTarget) return;
-    map.flyTo({
-      center: [focusTarget.lng, focusTarget.lat],
-      zoom: Math.max(map.getZoom(), 5.5),
-      essential: true
-    });
+
+    if (focusTarget.bbox) {
+      map.fitBounds(
+        [[focusTarget.bbox[0], focusTarget.bbox[1]], [focusTarget.bbox[2], focusTarget.bbox[3]]],
+        { padding: 72, maxZoom: focusTarget.zoom ?? 13, duration: 1200, essential: true }
+      );
+    } else {
+      map.flyTo({
+        center: [focusTarget.lng, focusTarget.lat],
+        zoom: focusTarget.zoom ?? Math.max(map.getZoom(), 5.5),
+        essential: true
+      });
+    }
+
+    searchMarkerRef.current?.remove();
+    searchMarkerRef.current = null;
+    if (focusTarget.label) {
+      const popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 22 })
+        .setText(focusTarget.label);
+      const marker = new maplibregl.Marker({ color: "#22d3ee" })
+        .setLngLat([focusTarget.lng, focusTarget.lat])
+        .setPopup(popup)
+        .addTo(map);
+      marker.togglePopup();
+      searchMarkerRef.current = marker;
+    }
   }, [focusTarget]);
 
   return (
     <div className="relative h-full min-h-0 w-full overflow-hidden bg-[#071525]" style={{ height: "100%", minHeight: 0, width: "100%" }}>
       <div ref={containerRef} className="h-full min-h-0 w-full" style={{ height: "100%", minHeight: 0, width: "100%" }} />
+      <div className="absolute bottom-4 left-4 z-20 w-48 rounded-md border border-white/15 bg-[#071827]/94 p-2.5 shadow-xl backdrop-blur sm:bottom-auto sm:left-auto sm:right-4 sm:top-4">
+        <div className="mb-1.5 flex items-center gap-2 px-1 text-xs font-semibold uppercase text-slate-300"><Layers3 className="h-3.5 w-3.5" /> Map layers</div>
+        {([
+          ["images", "User Images"],
+          ["territories", "Territories"],
+          ["hexGrid", "Hex Grid"],
+          ["kingdomBorders", "Kingdom Borders"]
+        ] as const).map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            aria-pressed={layerVisibility[key]}
+            className="flex h-8 w-full items-center justify-between px-1 text-left text-xs text-slate-100 transition-colors hover:text-white"
+            onClick={() => setLayerVisibility((current) => ({ ...current, [key]: !current[key] }))}
+          >
+            <span>{label}</span>
+            <span className={`flex h-4 w-4 items-center justify-center border ${layerVisibility[key] ? "border-cyan-300 bg-cyan-400 text-slate-950" : "border-slate-500 bg-transparent"}`}>
+              {layerVisibility[key] ? <Check className="h-3 w-3" /> : null}
+            </span>
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

@@ -53,6 +53,7 @@ export async function GET() {
             ownerName: territory.owner.displayName,
             ownerFounderNumber: territory.owner.founderNumber,
             ownerKingdomUnlocked: Boolean(territory.owner.kingdomUnlockedAt),
+            level: territory.level,
             hexCount: territory._count.hexes,
             statistics: territory.statistics
           }

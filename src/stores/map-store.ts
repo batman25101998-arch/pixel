@@ -25,8 +25,19 @@ type MapStore = {
   setSelectedHex: (hex: SelectedHex | null) => void;
   refreshToken: number;
   refresh: () => void;
-  focusTarget: { lng: number; lat: number; nonce: number } | null;
-  focusMap: (lng: number, lat: number) => void;
+  focusTarget: {
+    lng: number;
+    lat: number;
+    zoom?: number;
+    bbox?: [number, number, number, number];
+    label?: string;
+    nonce: number;
+  } | null;
+  focusMap: (
+    lng: number,
+    lat: number,
+    options?: { zoom?: number; bbox?: [number, number, number, number]; label?: string }
+  ) => void;
 };
 
 export const useMapStore = create<MapStore>((set) => ({
@@ -35,5 +46,5 @@ export const useMapStore = create<MapStore>((set) => ({
   refreshToken: 0,
   refresh: () => set((state) => ({ refreshToken: state.refreshToken + 1 })),
   focusTarget: null,
-  focusMap: (lng, lat) => set({ focusTarget: { lng, lat, nonce: Date.now() } })
+  focusMap: (lng, lat, options = {}) => set({ focusTarget: { lng, lat, ...options, nonce: Date.now() } })
 }));
