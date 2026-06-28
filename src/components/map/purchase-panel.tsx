@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
-import { Award, CheckCircle2, Loader2, MapPin, ShoppingCart, X } from "lucide-react";
+import { Award, CheckCircle2, ImageUp, Loader2, MapPin, ShoppingCart, X } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -87,6 +87,10 @@ export function PurchasePanel() {
   const [certificate, setCertificate] = useState<Certificate | null>(null);
   const [checkoutStatus, setCheckoutStatus] = useState<string | null>(null);
   const touchStartY = useRef<number | null>(null);
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
+  const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [selectedImagePreview, setSelectedImagePreview] = useState<string | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   const purchased = selectedHex?.purchased;
   const status = purchased?.status ?? "AVAILABLE";
@@ -107,6 +111,9 @@ export function PurchasePanel() {
   useEffect(() => {
     if (!selectedHex) return;
     setError(null);
+    setSelectedImage(null);
+    setSelectedImagePreview(null);
+    if (imageInputRef.current) imageInputRef.current.value = "";
     const saved = isClientDemoMode ? getDemoOwnedHexes().find((hex) => hex.h3Index === selectedHex.h3Index) : null;
     setTitle(saved?.title ?? selectedHex.purchased?.title ?? "");
     setMessage(saved?.message ?? selectedHex.purchased?.message ?? "");
@@ -114,6 +121,12 @@ export function PurchasePanel() {
     setImageUrl(saved?.imageUrl ?? selectedHex.purchased?.imageUrl ?? "");
     setExternalLink(saved?.externalLink ?? selectedHex.purchased?.externalLink ?? "");
   }, [selectedHex]);
+
+  useEffect(() => {
+    return () => {
+      if (selectedImagePreview) URL.revokeObjectURL(selectedImagePreview);
+    };
+  }, [selectedImagePreview]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -330,6 +343,53 @@ export function PurchasePanel() {
     }
   }
 
+  function chooseImage(file: File | undefined) {
+    if (selectedImagePreview) URL.revokeObjectURL(selectedImagePreview);
+    setSelectedImage(null);
+    setSelectedImagePreview(null);
+    setError(null);
+    if (!file) return;
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      setError("Use a JPEG, PNG, or WebP image.");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setError("Image must be smaller than 5MB.");
+      return;
+    }
+    setSelectedImage(file);
+    setSelectedImagePreview(URL.createObjectURL(file));
+  }
+
+  async function uploadImage() {
+    if (!selectedHex?.purchased?.id || !isOwnHex || !selectedImage) return;
+    setUploadingImage(true);
+    setError(null);
+    try {
+      const formData = new FormData();
+      formData.set("hexId", selectedHex.purchased.id);
+      formData.set("file", selectedImage);
+      const response = await fetch("/api/upload/hex-image", { method: "POST", body: formData });
+      const data = (await response.json()) as { imageUrl?: string; error?: string };
+      if (!response.ok || !data.imageUrl) throw new Error(data.error ?? "Image could not be uploaded.");
+
+      setImageUrl(data.imageUrl);
+      setSelectedHex({
+        ...selectedHex,
+        purchased: { ...selectedHex.purchased, imageUrl: data.imageUrl }
+      });
+      if (selectedImagePreview) URL.revokeObjectURL(selectedImagePreview);
+      setSelectedImage(null);
+      setSelectedImagePreview(null);
+      if (imageInputRef.current) imageInputRef.current.value = "";
+      refresh();
+    } catch (uploadError) {
+      setError(uploadError instanceof Error ? uploadError.message : "Image could not be uploaded.");
+    } finally {
+      setUploadingImage(false);
+    }
+  }
+
   function closePanel() {
     setSelectedHex(null);
     setCertificate(null);
@@ -432,7 +492,31 @@ export function PurchasePanel() {
                     <div className="space-y-1.5"><Label htmlFor="owned-message">Message</Label><Textarea id="owned-message" maxLength={240} value={message} onChange={(event) => setMessage(event.target.value)} /></div>
                     <div className="grid gap-3 sm:grid-cols-2">
                       <div className="space-y-1.5"><Label htmlFor="owned-avatar">Avatar URL</Label><Input id="owned-avatar" value={avatarUrl} onChange={(event) => setAvatarUrl(event.target.value)} /></div>
-                      <div className="space-y-1.5"><Label htmlFor="owned-image">Image URL</Label><Input id="owned-image" value={imageUrl} onChange={(event) => setImageUrl(event.target.value)} /></div>
+                      <div className="space-y-1.5"><Label htmlFor="owned-image">Image URL</Label><Input id="owned-image" type="url" value={imageUrl} onChange={(event) => setImageUrl(event.target.value)} placeholder="https://..." /></div>
+                    </div>
+                    <div className="space-y-2 rounded-md border border-border bg-background p-3">
+                      <div>
+                        <p className="text-sm font-medium">Upload an image</p>
+                        <p className="text-xs text-muted-foreground">JPEG, PNG, or WebP. Maximum 5MB.</p>
+                      </div>
+                      <input
+                        ref={imageInputRef}
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        className="sr-only"
+                        onChange={(event) => chooseImage(event.target.files?.[0])}
+                      />
+                      <div className="flex flex-col gap-2 sm:flex-row">
+                        <Button type="button" variant="outline" className="w-full" disabled={uploadingImage || isClientDemoMode} onClick={() => imageInputRef.current?.click()}>
+                          <ImageUp className="h-4 w-4" /> Choose image
+                        </Button>
+                        <Button type="button" className="w-full" disabled={!selectedImage || uploadingImage || isClientDemoMode} onClick={uploadImage}>
+                          {uploadingImage ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImageUp className="h-4 w-4" />}
+                          {uploadingImage ? "Uploading..." : "Upload image"}
+                        </Button>
+                      </div>
+                      {isClientDemoMode ? <p className="text-xs text-muted-foreground">Direct uploads require production storage. Image URLs still work in demo mode.</p> : null}
+                      {selectedImagePreview ? <img src={selectedImagePreview} alt="Selected image preview" className="aspect-video w-full rounded-md object-cover" /> : null}
                     </div>
                     <div className="space-y-1.5"><Label htmlFor="owned-link">External link</Label><Input id="owned-link" type="url" value={externalLink} onChange={(event) => setExternalLink(event.target.value)} /></div>
                     {avatarUrl ? <img src={avatarUrl} alt="Avatar preview" className="h-12 w-12 rounded-full object-cover" /> : null}
