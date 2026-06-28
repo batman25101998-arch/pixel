@@ -5,7 +5,7 @@ import { cellForLngLat, toFeature } from "@/lib/hex";
 import { env, isDemoMode } from "@/lib/env";
 
 type SearchResult = {
-  type: "hex" | "user" | "territory" | "geocode";
+  type: "hex" | "user" | "geocode";
   label: string;
   latitude: number;
   longitude: number;
@@ -124,8 +124,7 @@ export async function GET(request: Request) {
 
   if (!isDemoMode) {
     try {
-      const [users, territories] = await Promise.all([
-        prisma.user.findMany({
+      const users = await prisma.user.findMany({
           where: {
             OR: [
               { username: { contains: query, mode: "insensitive" } },
@@ -140,19 +139,7 @@ export async function GET(request: Request) {
             displayName: true,
             ownedHexes: { take: 1, orderBy: { purchaseDate: "desc" }, select: { h3Index: true, latitude: true, longitude: true } }
           }
-        }),
-        prisma.territory.findMany({
-          where: { name: { contains: query, mode: "insensitive" }, status: "ACTIVE" },
-          take: 8,
-          orderBy: { hexCount: "desc" },
-          select: {
-            name: true,
-            level: true,
-            owner: { select: { displayName: true } },
-            hexes: { take: 1, select: { h3Index: true, latitude: true, longitude: true } }
-          }
-        })
-      ]);
+        });
 
       const internalResults: SearchResult[] = [
         ...users.flatMap((user) => {
@@ -165,18 +152,6 @@ export async function GET(request: Request) {
             latitude: hex.latitude ?? fallbackLat,
             longitude: hex.longitude ?? fallbackLng,
             zoom: 10
-          }];
-        }),
-        ...territories.flatMap((territory) => {
-          const hex = territory.hexes[0];
-          if (!hex) return [];
-          const [fallbackLat, fallbackLng] = cellToLatLng(hex.h3Index);
-          return [{
-            type: "territory" as const,
-            label: `${territory.name} · ${territory.level.toLowerCase()} by ${territory.owner.displayName}`,
-            latitude: hex.latitude ?? fallbackLat,
-            longitude: hex.longitude ?? fallbackLng,
-            zoom: 9
           }];
         })
       ];

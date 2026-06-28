@@ -3,6 +3,8 @@ import { DEMO_USER, demoListings } from "@/lib/demo";
 
 const HEXES_KEY = "pixel-world-demo-owned-hexes";
 const TERRITORIES_KEY = "pixel-world-demo-territories";
+const OFFERS_KEY = "pixel-world-demo-hex-offers";
+const TRADE_OFFERS_KEY = "pixel-world-demo-trade-offers";
 export const DEMO_STORAGE_EVENT = "pixel-world-demo-storage-changed";
 
 export type DemoHex = {
@@ -35,13 +37,44 @@ export type DemoTerritory = {
 };
 
 export type DemoSearchResult = {
-  type: "hex" | "territory";
+  type: "hex";
   label: string;
   h3Index: string;
   latitude: number;
   longitude: number;
   hex?: DemoHex;
-  territory?: DemoTerritory;
+};
+
+export type DemoOfferStatus = "PENDING" | "ACCEPTED" | "REJECTED" | "COUNTERED" | "CANCELLED" | "EXPIRED";
+
+export type DemoHexOffer = {
+  id: string;
+  fromUserId: string;
+  fromUserName: string;
+  toUserId: string;
+  toUserName: string;
+  targetHexId: string;
+  targetH3Index: string;
+  amountCents: number;
+  status: DemoOfferStatus;
+  message: string;
+  createdAt: string;
+  expiresAt: string;
+};
+
+export type DemoTradeOffer = {
+  id: string;
+  fromUserId: string;
+  fromUserName: string;
+  toUserId: string;
+  toUserName: string;
+  offeredHexIds: string[];
+  requestedHexIds: string[];
+  extraAmountCents: number;
+  status: DemoOfferStatus;
+  message: string;
+  createdAt: string;
+  expiresAt: string;
 };
 
 function readArray<T>(key: string): T[] {
@@ -182,6 +215,100 @@ export function listDemoMarketplace() {
   return getDemoOwnedHexes().filter((hex) => hex.forSale && hex.salePriceCents && hex.salePriceCents > 0);
 }
 
+export function getDemoOffers() {
+  const saved = readArray<DemoHexOffer>(OFFERS_KEY);
+  if (saved.length) return saved;
+  const owned = getDemoOwnedHexes().find((hex) => hex.ownerId === DEMO_USER.id);
+  if (!owned) return [];
+  return [{
+    id: `demo-offer-received-${owned.id}`,
+    fromUserId: "demo-collector",
+    fromUserName: "Pixel Collector",
+    toUserId: DEMO_USER.id,
+    toUserName: DEMO_USER.name,
+    targetHexId: owned.id,
+    targetH3Index: owned.h3Index,
+    amountCents: 500,
+    status: "PENDING" as const,
+    message: "I would love to add this location to my collection.",
+    createdAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + 7 * 86400000).toISOString()
+  }];
+}
+
+export function createDemoHexOffer(input: { targetHexId: string; targetH3Index: string; toUserId: string; toUserName: string; amountCents: number; message?: string }) {
+  if (input.toUserId === DEMO_USER.id) throw new Error("You cannot make an offer on your own hex.");
+  const offer: DemoHexOffer = {
+    id: `demo-offer-${Date.now()}`,
+    fromUserId: DEMO_USER.id,
+    fromUserName: DEMO_USER.name,
+    toUserId: input.toUserId,
+    toUserName: input.toUserName,
+    targetHexId: input.targetHexId,
+    targetH3Index: input.targetH3Index,
+    amountCents: input.amountCents,
+    status: "PENDING",
+    message: input.message?.trim() ?? "",
+    createdAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + 7 * 86400000).toISOString()
+  };
+  writeArray(OFFERS_KEY, [offer, ...getDemoOffers()]);
+  return offer;
+}
+
+export function updateDemoHexOffer(id: string, action: "accept" | "reject" | "cancel" | "counter", amountCents?: number) {
+  const offers = getDemoOffers();
+  const offer = offers.find((item) => item.id === id);
+  if (!offer) throw new Error("Offer not found.");
+  const status: DemoOfferStatus = action === "accept" ? "ACCEPTED" : action === "reject" ? "REJECTED" : action === "cancel" ? "CANCELLED" : "COUNTERED";
+  const updated = { ...offer, status, amountCents: action === "counter" ? amountCents ?? offer.amountCents : offer.amountCents };
+  writeArray(OFFERS_KEY, offers.map((item) => item.id === id ? updated : item));
+  if (action === "accept") {
+    const hex = getDemoOwnedHexes().find((item) => item.id === offer.targetHexId);
+    if (hex && hex.ownerId === offer.toUserId) saveDemoHex({ ...hex, ownerId: offer.fromUserId, ownerName: offer.fromUserName, territoryId: undefined } as DemoHex);
+  }
+  return updated;
+}
+
+export function getDemoTradeOffers() {
+  return readArray<DemoTradeOffer>(TRADE_OFFERS_KEY);
+}
+
+export function createDemoTradeOffer(input: Omit<DemoTradeOffer, "id" | "fromUserId" | "fromUserName" | "status" | "createdAt" | "expiresAt">) {
+  const trade: DemoTradeOffer = {
+    ...input,
+    id: `demo-trade-${Date.now()}`,
+    fromUserId: DEMO_USER.id,
+    fromUserName: DEMO_USER.name,
+    status: "PENDING",
+    createdAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + 7 * 86400000).toISOString()
+  };
+  writeArray(TRADE_OFFERS_KEY, [trade, ...getDemoTradeOffers()]);
+  return trade;
+}
+
+export function updateDemoTradeOffer(id: string, action: "accept" | "reject" | "cancel") {
+  const trades = getDemoTradeOffers();
+  const trade = trades.find((item) => item.id === id);
+  if (!trade) throw new Error("Trade offer not found.");
+  if (action === "accept" && trade.extraAmountCents > 0) throw new Error("Demo cash settlement is not available yet.");
+  if (action === "accept") {
+    const hexes = getDemoOwnedHexes();
+    const offered = hexes.filter((hex) => trade.offeredHexIds.includes(hex.id) && hex.ownerId === trade.fromUserId);
+    const requested = hexes.filter((hex) => trade.requestedHexIds.includes(hex.id) && hex.ownerId === trade.toUserId);
+    if (offered.length !== trade.offeredHexIds.length || requested.length !== trade.requestedHexIds.length) {
+      throw new Error("Hex ownership changed after this trade was proposed.");
+    }
+    for (const hex of offered) saveDemoHex({ ...hex, ownerId: trade.toUserId, ownerName: trade.toUserName });
+    for (const hex of requested) saveDemoHex({ ...hex, ownerId: trade.fromUserId, ownerName: trade.fromUserName });
+  }
+  const status: DemoOfferStatus = action === "accept" ? "ACCEPTED" : action === "reject" ? "REJECTED" : "CANCELLED";
+  const updated = { ...trade, status };
+  writeArray(TRADE_OFFERS_KEY, trades.map((item) => item.id === id ? updated : item));
+  return updated;
+}
+
 function resultForCell(h3Index: string, label: string): DemoSearchResult {
   const owned = getDemoOwnedHexes().find((hex) => hex.h3Index === h3Index);
   const [latitude, longitude] = owned ? [owned.latitude, owned.longitude] : cellToLatLng(h3Index);
@@ -202,16 +329,6 @@ export function searchDemo(query: string): DemoSearchResult[] {
   if (isValidCell(normalized)) return [resultForCell(normalized, normalized)];
 
   const needle = normalized.toLowerCase();
-  const territoryResults = getDemoTerritories()
-    .filter((territory) => territory.name.toLowerCase().includes(needle))
-    .flatMap((territory) => {
-      const h3Index = territory.hexIndexes[0];
-      if (!h3Index) return [];
-      const [latitude, longitude] = cellToLatLng(h3Index);
-      return [{ type: "territory" as const, label: territory.name, h3Index, latitude, longitude, territory }];
-    });
-  if (territoryResults.length) return territoryResults;
-
   if (DEMO_USER.name.toLowerCase().includes(needle) || "demo-user".includes(needle)) {
     return getDemoOwnedHexes().map((hex) => ({
       type: "hex" as const,

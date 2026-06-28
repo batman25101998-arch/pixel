@@ -39,6 +39,7 @@ export async function GET(request: Request) {
         owner: {
           select: {
             id: true,
+            username: true,
             displayName: true,
             avatarUrl: true,
             founderNumber: true,
@@ -63,6 +64,7 @@ export async function GET(request: Request) {
             longitude: hex.longitude,
             ownerId: hex.ownerId,
             ownerName: hex.owner.displayName,
+            ownerUsername: hex.owner.username,
             ownerImage: hex.avatarUrl ?? hex.owner.avatarUrl,
             ownerFounderNumber: hex.owner.founderNumber,
             ownerKingdomUnlocked: Boolean(hex.owner.kingdomUnlockedAt),
@@ -70,8 +72,9 @@ export async function GET(request: Request) {
             message: hex.message,
             imageUrl: hex.imageUrl,
             externalLink: hex.link,
-            status: hex.status,
-            priceCents: Number(hex.priceCents)
+            status: "OWNED",
+            priceCents: Number(hex.priceCents),
+            purchaseDate: hex.purchaseDate.toISOString()
           }
         }];
       })

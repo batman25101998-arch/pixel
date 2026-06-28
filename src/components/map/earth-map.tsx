@@ -6,24 +6,18 @@ import maplibregl, { Map, type ExpressionSpecification, type StyleSpecification 
 import { useSession } from "next-auth/react";
 import { Check, Layers3 } from "lucide-react";
 import { DEMO_USER, isClientDemoMode } from "@/lib/demo";
-import { getDemoOwnedHexes, getDemoTerritories } from "@/lib/demo-storage";
+import { getDemoOwnedHexes } from "@/lib/demo-storage";
 import { useMapStore, type SelectedHex } from "@/stores/map-store";
 
 const sourceId = "earth-hexes";
 const selectedSourceId = "earth-hex-selected";
-const territorySourceId = "earth-territories";
 const fillLayerId = "earth-hexes-fill";
 const outlineLayerId = "earth-hexes-outline";
-const territoryFillLayerId = "earth-territories-fill";
-const territoryOutlineLayerId = "earth-territories-outline";
-const territoryLineLayerId = "earth-territories-line";
 const selectedFillLayerId = "earth-hex-selected-fill";
 const selectedLineLayerId = "earth-hex-selected-line";
 type LayerVisibility = {
   images: boolean;
-  territories: boolean;
   hexGrid: boolean;
-  kingdomBorders: boolean;
 };
 
 function applyLayerVisibility(map: Map, visibility: LayerVisibility) {
@@ -32,9 +26,7 @@ function applyLayerVisibility(map: Map, visibility: LayerVisibility) {
       if (map.getLayer(layerId)) map.setLayoutProperty(layerId, "visibility", visible ? "visible" : "none");
     }
   };
-  setVisibility([territoryFillLayerId, territoryOutlineLayerId], visibility.territories);
   setVisibility([fillLayerId, outlineLayerId], visibility.hexGrid);
-  setVisibility([territoryLineLayerId], visibility.kingdomBorders);
 }
 
 const darkMapStyle: string | StyleSpecification =
@@ -135,16 +127,12 @@ function validateGeoJsonResponse(value: unknown): value is GeoJSON.FeatureCollec
 function applyDemoOwnership(data: GeoJSON.FeatureCollection<GeoJSON.Polygon>) {
   if (!isClientDemoMode) return data;
   const ownedByIndex = new globalThis.Map(getDemoOwnedHexes().map((hex) => [hex.h3Index, hex]));
-  const territoryByIndex = new globalThis.Map(
-    getDemoTerritories().flatMap((territory) => territory.hexIndexes.map((index) => [index, territory] as const))
-  );
   return {
     ...data,
     features: data.features.map((feature) => {
       const h3Index = String(feature.properties?.h3Index ?? "");
       const owned = ownedByIndex.get(h3Index);
       if (!owned) return feature;
-      const territory = territoryByIndex.get(h3Index);
       return {
         ...feature,
         id: owned.id,
@@ -160,12 +148,7 @@ function applyDemoOwnership(data: GeoJSON.FeatureCollection<GeoJSON.Polygon>) {
           externalLink: owned.externalLink,
           priceCents: owned.priceCents,
           purchaseDate: owned.purchaseDate,
-          status: "MY_OWNED",
-          ...(territory ? {
-            territoryId: territory.id,
-            territoryName: territory.name,
-            territoryColor: territory.color
-          } : {})
+          status: "MY_OWNED"
         }
       };
     })
@@ -178,7 +161,9 @@ type PersistedHexResponse = {
     h3Index: string;
     latitude: number | null;
     longitude: number | null;
+    ownerId: string;
     ownerName: string;
+    ownerUsername: string | null;
     ownerImage: string | null;
     avatarUrl: string | null;
     ownerFounderNumber: number | null;
@@ -189,6 +174,7 @@ type PersistedHexResponse = {
     externalLink: string | null;
     status: string;
     priceCents: number;
+    purchaseDate: string;
   } | null;
 };
 
@@ -200,7 +186,9 @@ function selectedHexFromProperties(props: Record<string, string | number | null>
     lat: Number(props.latitude),
     purchased: status === "AVAILABLE" ? undefined : {
       id: String(props.id),
+      ownerId: props.ownerId ? String(props.ownerId) : undefined,
       ownerName: props.ownerName ? String(props.ownerName) : "Anonymous owner",
+      ownerUsername: props.ownerUsername ? String(props.ownerUsername) : null,
       ownerImage: props.ownerImage ? String(props.ownerImage) : null,
       ownerFounderNumber: props.ownerFounderNumber ? Number(props.ownerFounderNumber) : null,
       ownerKingdomUnlocked: Boolean(props.ownerKingdomUnlocked),
@@ -209,7 +197,8 @@ function selectedHexFromProperties(props: Record<string, string | number | null>
       imageUrl: props.imageUrl ? String(props.imageUrl) : null,
       externalLink: props.externalLink ? String(props.externalLink) : null,
       status,
-      priceCents: Number(props.priceCents ?? 100)
+      priceCents: Number(props.priceCents ?? 100),
+      purchaseDate: props.purchaseDate ? String(props.purchaseDate) : undefined
     }
   };
 }
@@ -225,7 +214,9 @@ async function loadPersistedSelection(selection: SelectedHex) {
     lat: data.hex.latitude ?? selection.lat,
     purchased: {
       id: data.hex.id,
+      ownerId: data.hex.ownerId,
       ownerName: data.hex.ownerName,
+      ownerUsername: data.hex.ownerUsername,
       ownerImage: data.hex.ownerImage,
       avatarUrl: data.hex.avatarUrl,
       ownerFounderNumber: data.hex.ownerFounderNumber,
@@ -235,7 +226,8 @@ async function loadPersistedSelection(selection: SelectedHex) {
       imageUrl: data.hex.imageUrl,
       externalLink: data.hex.externalLink,
       status: data.hex.status,
-      priceCents: data.hex.priceCents
+      priceCents: data.hex.priceCents,
+      purchaseDate: data.hex.purchaseDate
     }
   } satisfies SelectedHex;
 }
@@ -243,8 +235,6 @@ async function loadPersistedSelection(selection: SelectedHex) {
 function hexFillColorExpression(currentUserId: string): ExpressionSpecification {
   return [
     "case",
-    ["has", "territoryColor"],
-    ["get", "territoryColor"],
     ["==", ["get", "status"], "MY_OWNED"],
     "#22c55e",
     ["all", ["!=", ["get", "status"], "AVAILABLE"], ["==", ["get", "ownerId"], currentUserId]],
@@ -329,7 +319,8 @@ function demoImageCollection(): ImagePointCollection {
           imageUrl: hex.imageUrl,
           externalLink: hex.externalLink,
           status: "MY_OWNED",
-          priceCents: hex.priceCents
+          priceCents: hex.priceCents,
+          purchaseDate: hex.purchaseDate
         }
       }];
     })
@@ -416,9 +407,7 @@ export function EarthMap() {
   const imageRequestRef = useRef(0);
   const [layerVisibility, setLayerVisibility] = useState<LayerVisibility>({
     images: true,
-    territories: true,
-    hexGrid: true,
-    kingdomBorders: true
+    hexGrid: true
   });
   const layerVisibilityRef = useRef(layerVisibility);
   const setSelectedHex = useMapStore((state) => state.setSelectedHex);
@@ -480,20 +469,6 @@ export function EarthMap() {
       }
     }
 
-    async function loadTerritories() {
-      if (!map.getSource(territorySourceId)) return;
-      if (isClientDemoMode) return;
-      try {
-        const response = await fetch("/api/territories");
-        const data = await response.json();
-        if (!data?.geojson || data.geojson.type !== "FeatureCollection") return;
-        const source = map.getSource(territorySourceId) as maplibregl.GeoJSONSource;
-        source.setData(data.geojson);
-      } catch (error) {
-        console.error("/api/territories load failed", error);
-      }
-    }
-
     async function loadCustomImageTiles() {
       const requestId = ++imageRequestRef.current;
       if (!layerVisibilityRef.current.images) {
@@ -524,10 +499,6 @@ export function EarthMap() {
         type: "geojson",
         data: { type: "FeatureCollection", features: [] }
       });
-      map.addSource(territorySourceId, {
-        type: "geojson",
-        data: { type: "FeatureCollection", features: [] }
-      });
       map.addLayer({
         id: fillLayerId,
         source: sourceId,
@@ -548,42 +519,6 @@ export function EarthMap() {
           "line-color": hexLineColorExpression(),
           "line-opacity": hexLineOpacityExpression(),
           "line-width": ["case", ["boolean", ["feature-state", "hover"], false], 1.1, 0.6]
-        }
-      });
-
-      map.addLayer({
-        id: territoryFillLayerId,
-        source: territorySourceId,
-        type: "fill",
-        minzoom: 0,
-        paint: {
-          "fill-color": ["coalesce", ["get", "color"], "#22c55e"],
-          "fill-opacity": 0.08
-        }
-      });
-
-      map.addLayer({
-        id: territoryOutlineLayerId,
-        source: territorySourceId,
-        type: "line",
-        minzoom: 0,
-        paint: {
-          "line-color": ["coalesce", ["get", "color"], "#22c55e"],
-          "line-opacity": 0.45,
-          "line-width": 1
-        }
-      });
-
-      map.addLayer({
-        id: territoryLineLayerId,
-        source: territorySourceId,
-        type: "line",
-        minzoom: 0,
-        filter: ["in", ["get", "level"], ["literal", ["KINGDOM", "EMPIRE"]]],
-        paint: {
-          "line-color": ["coalesce", ["get", "color"], "#22c55e"],
-          "line-opacity": 0.95,
-          "line-width": ["interpolate", ["linear"], ["zoom"], 1, 1.5, 5, 2.5, 10, 4]
         }
       });
 
@@ -613,7 +548,6 @@ export function EarthMap() {
       applyLayerVisibility(map, layerVisibilityRef.current);
 
       void loadHexes();
-      void loadTerritories();
       void loadCustomImageTiles();
 
       const requestedHex = new URLSearchParams(window.location.search).get("hex");
@@ -673,8 +607,6 @@ export function EarthMap() {
       const features = map.queryRenderedFeatures(event.point, { layers: [fillLayerId] });
       if (features[0]) {
         const props = features[0].properties as Record<string, string | number | null>;
-        const lng = Number(props.longitude);
-        const lat = Number(props.latitude);
         const selection = selectedHexFromProperties(props);
         setSelectedHex(selection);
         if (!isClientDemoMode) {
@@ -687,20 +619,6 @@ export function EarthMap() {
             .catch((error) => console.error("Selected hex lookup failed", error));
         }
 
-        const selectedSource = map.getSource(selectedSourceId) as maplibregl.GeoJSONSource;
-        selectedSource.setData({
-          type: "FeatureCollection",
-          features: [
-            (features[0] as any).toJSON
-              ? (features[0] as any).toJSON()
-              : (features[0] as GeoJSON.Feature)
-            ]
-        });
-        map.flyTo({
-          center: [lng, lat],
-          zoom: Math.max(map.getZoom(), 5.5),
-          essential: true
-        });
         return;
       }
 
@@ -710,12 +628,8 @@ export function EarthMap() {
         body: JSON.stringify({ lng: event.lngLat.lng, lat: event.lngLat.lat })
       });
       const data = await response.json();
-      setSelectedHex({ h3Index: data.h3Index, lng: event.lngLat.lng, lat: event.lngLat.lat });
-      map.flyTo({
-        center: [event.lngLat.lng, event.lngLat.lat],
-        zoom: Math.max(map.getZoom(), 5.5),
-        essential: true
-      });
+      const selection = { h3Index: data.h3Index, lng: event.lngLat.lng, lat: event.lngLat.lat };
+      setSelectedHex(selection);
     });
 
     return () => {
@@ -781,17 +695,6 @@ export function EarthMap() {
     } else {
       clearCustomImageTiles(customImageTilesRef.current);
     }
-    if (isClientDemoMode) return;
-    fetch("/api/territories")
-      .then((response) => response.json())
-      .then((data) => {
-        if (!data?.geojson || data.geojson.type !== "FeatureCollection") return;
-        const source = map.getSource(territorySourceId) as maplibregl.GeoJSONSource;
-        source?.setData(data.geojson);
-      })
-      .catch((error) => {
-        console.error("/api/territories refresh failed", error);
-      });
   }, [currentUserId, refreshToken]);
 
   useEffect(() => {
@@ -850,9 +753,7 @@ export function EarthMap() {
         <div className="mb-1.5 flex items-center gap-2 px-1 text-xs font-semibold uppercase text-slate-300"><Layers3 className="h-3.5 w-3.5" /> Map layers</div>
         {([
           ["images", "User Images"],
-          ["territories", "Territories"],
           ["hexGrid", "Hex Grid"],
-          ["kingdomBorders", "Kingdom Borders"]
         ] as const).map(([key, label]) => (
           <button
             key={key}

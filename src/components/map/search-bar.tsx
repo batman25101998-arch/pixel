@@ -10,7 +10,7 @@ import { isClientDemoMode, DEMO_USER } from "@/lib/demo";
 import { searchDemo, type DemoSearchResult } from "@/lib/demo-storage";
 
 type SearchResult = {
-  type: "hex" | "user" | "territory" | "geocode";
+  type: "hex" | "user" | "geocode";
   label: string;
   latitude: number;
   longitude: number;
@@ -34,11 +34,11 @@ function resultFromDemo(result: DemoSearchResult): SearchResult {
       ownerName: hex.ownerName,
       ownerImage: hex.avatarUrl,
       title: hex.title,
-      message: result.territory?.description || hex.message,
-      imageUrl: result.territory?.bannerImageUrl || result.territory?.flagImageUrl || hex.imageUrl,
+      message: hex.message,
+      imageUrl: hex.imageUrl,
       externalLink: hex.externalLink,
-      status: hex.ownerId === DEMO_USER.id ? "MY_OWNED" : hex.forSale ? "FOR_SALE" : "OWNED",
-      priceCents: hex.salePriceCents ?? hex.priceCents
+      status: hex.ownerId === DEMO_USER.id ? "MY_OWNED" : "OWNED",
+      priceCents: hex.priceCents
     } : undefined
   };
 }
@@ -93,7 +93,7 @@ export function SearchBar() {
     setError(null);
     setResults([]);
     if (!normalized) {
-      setError("Enter a hex, player, territory, country, city, or coordinates.");
+      setError("Enter a hex, player, country, city, or coordinates.");
       return;
     }
 
@@ -130,7 +130,7 @@ export function SearchBar() {
   return (
     <div className="absolute left-4 top-4 z-20 w-[min(500px,calc(100vw-2rem))]">
       <form onSubmit={submit} className="flex flex-wrap gap-2 rounded-lg border border-border bg-card/95 p-2 shadow-xl backdrop-blur">
-        <Input className="min-w-0 flex-1" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Hex, player, territory, city, country, or lat,lng" aria-label="Search the world map" />
+        <Input className="min-w-0 flex-1" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Hex, player, city, country, or lat,lng" aria-label="Search the world map" />
         <Button type="submit" size="icon" aria-label="Search" disabled={loading}>
           {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
         </Button>

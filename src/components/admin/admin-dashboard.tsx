@@ -7,7 +7,6 @@ import {
   ArrowRightLeft,
   Ban,
   CircleDollarSign,
-  Flag,
   Hexagon,
   ImageOff,
   Map,
@@ -20,8 +19,6 @@ import {
   Users
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { FounderBadge } from "@/components/founder-badge";
-import { KingdomBadge } from "@/components/kingdom-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -56,7 +53,6 @@ export function AdminDashboard({ initialData }: { initialData: AdminDashboardDat
     { label: "Users", value: formatNumber(data.metrics.users), icon: Users },
     { label: "Banned", value: formatNumber(data.metrics.bannedUsers), icon: Ban },
     { label: "Purchased hexes", value: formatNumber(data.metrics.hexes), icon: Hexagon },
-    { label: "Territories", value: formatNumber(data.metrics.territories), icon: Flag },
     { label: "Transactions", value: formatNumber(data.metrics.transactions), icon: ReceiptText },
     { label: "Gross sales", value: money(data.metrics.grossRevenueCents), icon: CircleDollarSign },
     { label: "Platform fees", value: money(data.metrics.platformFeesCents), icon: ShieldCheck },
@@ -202,7 +198,7 @@ export function AdminDashboard({ initialData }: { initialData: AdminDashboardDat
                       <div className="flex items-center gap-2">
                         <Avatar className="h-8 w-8"><AvatarImage src={user.avatarUrl ?? undefined} /><AvatarFallback>{initials(user.displayName)}</AvatarFallback></Avatar>
                         <div>
-                          <div className="flex items-center gap-2"><p className="font-medium">{user.displayName}</p><FounderBadge founderNumber={user.founderNumber} compact /><KingdomBadge unlocked={user.kingdomUnlocked} compact /></div>
+                          <p className="font-medium">{user.displayName}</p>
                           <p className="text-xs text-muted-foreground">{user.email}</p>
                         </div>
                       </div>
@@ -266,7 +262,7 @@ export function AdminDashboard({ initialData }: { initialData: AdminDashboardDat
             {data.images.length ? data.images.map((image) => (
               <div key={`${image.targetType}-${image.targetId}-${image.field}`} className="flex items-center gap-3 border-b border-border/70 py-3 last:border-0">
                 <img src={image.url} alt="Moderation preview" className="h-14 w-14 rounded-md border border-border object-cover" />
-                <div className="min-w-0 flex-1"><div className="flex items-center gap-2"><p className="truncate font-medium">{image.ownerName}</p><FounderBadge founderNumber={image.ownerFounderNumber} compact /><KingdomBadge unlocked={image.ownerKingdomUnlocked} compact /></div><p className="truncate text-xs text-muted-foreground">{image.label} · {image.field}</p></div>
+                <div className="min-w-0 flex-1"><p className="truncate font-medium">{image.ownerName}</p><p className="truncate text-xs text-muted-foreground">{image.label} · {image.field}</p></div>
                 <Button
                   size="icon"
                   variant="destructive"
@@ -292,7 +288,7 @@ export function AdminDashboard({ initialData }: { initialData: AdminDashboardDat
           <CardContent className="max-h-[520px] space-y-2 overflow-auto">
             {data.payments.length ? data.payments.map((payment) => (
               <div key={payment.id} className="flex items-center gap-3 border-b border-border/70 py-3 last:border-0">
-                <div className="min-w-0 flex-1"><div className="flex items-center gap-2"><p className="truncate font-medium">{payment.userName} · {money(payment.amountCents)}</p><FounderBadge founderNumber={payment.userFounderNumber} compact /><KingdomBadge unlocked={payment.userKingdomUnlocked} compact /></div><p className="truncate text-xs text-muted-foreground">{payment.userEmail} · {formatDate(payment.createdAt)}</p></div>
+                <div className="min-w-0 flex-1"><p className="truncate font-medium">{payment.userName} · {money(payment.amountCents)}</p><p className="truncate text-xs text-muted-foreground">{payment.userEmail} · {formatDate(payment.createdAt)}</p></div>
                 <span className={payment.status === "REFUNDED" ? "text-xs text-amber-400" : "text-xs text-emerald-400"}>{payment.status}</span>
                 <Button
                   size="sm"
@@ -323,8 +319,8 @@ export function AdminDashboard({ initialData }: { initialData: AdminDashboardDat
             <thead className="border-y border-border bg-muted/20 text-left text-muted-foreground"><tr><th className="px-4 py-2">Buyer</th><th>Seller</th><th>Hex</th><th>Type</th><th>Amount</th><th>Status</th><th className="pr-4">Date</th></tr></thead>
             <tbody>{data.transactions.map((transaction) => (
               <tr key={transaction.id} className="border-b border-border/70">
-                <td className="px-4 py-3"><div className="flex items-center gap-2"><p className="font-medium">{transaction.buyerName}</p><FounderBadge founderNumber={transaction.buyerFounderNumber} compact /><KingdomBadge unlocked={transaction.buyerKingdomUnlocked} compact /></div><p className="text-xs text-muted-foreground">{transaction.buyerEmail}</p></td>
-                <td><span className="inline-flex items-center gap-2">{transaction.sellerName ?? "Platform"}<FounderBadge founderNumber={transaction.sellerFounderNumber} compact /><KingdomBadge unlocked={transaction.sellerKingdomUnlocked} compact /></span></td><td className="max-w-44 truncate">{transaction.h3Index}</td><td>{transaction.type.replaceAll("_", " ")}</td><td>{money(transaction.amountCents)}</td><td>{transaction.status}</td><td className="pr-4">{formatDate(transaction.createdAt)}</td>
+                <td className="px-4 py-3"><p className="font-medium">{transaction.buyerName}</p><p className="text-xs text-muted-foreground">{transaction.buyerEmail}</p></td>
+                <td>{transaction.sellerName ?? "Platform"}</td><td className="max-w-44 truncate">{transaction.h3Index}</td><td>{transaction.type.replaceAll("_", " ")}</td><td>{money(transaction.amountCents)}</td><td>{transaction.status}</td><td className="pr-4">{formatDate(transaction.createdAt)}</td>
               </tr>
             ))}</tbody>
           </table>
@@ -337,7 +333,7 @@ export function AdminDashboard({ initialData }: { initialData: AdminDashboardDat
         <CardContent className="space-y-2">
           {data.auditLog.length ? data.auditLog.map((entry) => (
             <div key={entry.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-border/70 py-2 text-sm last:border-0">
-              <span className="inline-flex flex-wrap items-center gap-2"><strong>{entry.adminName}</strong><FounderBadge founderNumber={entry.adminFounderNumber} compact /><KingdomBadge unlocked={entry.adminKingdomUnlocked} compact /> · {entry.action.replaceAll("_", " ").toLowerCase()} · {entry.targetType} {entry.targetId}</span>
+              <span><strong>{entry.adminName}</strong> · {entry.action.replaceAll("_", " ").toLowerCase()} · {entry.targetType} {entry.targetId}</span>
               <span className="text-muted-foreground">{formatDate(entry.createdAt)}</span>
             </div>
           )) : <p className="text-sm text-muted-foreground">No administrative actions recorded.</p>}

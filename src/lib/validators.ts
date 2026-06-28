@@ -5,9 +5,7 @@ export const hexPatchSchema = z.object({
   message: z.string().max(240).optional(),
   avatarUrl: z.string().url().nullable().optional(),
   imageUrl: z.string().url().nullable().optional(),
-  externalLink: z.string().url().nullable().optional(),
-  status: z.enum(["OWNED", "FOR_SALE", "LOCKED", "BANNED"]).optional(),
-  priceCents: z.number().int().min(100).max(100000000).optional()
+  externalLink: z.string().url().nullable().optional()
 });
 
 export const checkoutSchema = z.object({
@@ -38,6 +36,30 @@ export const territorySchema = z.object({
   flagImageUrl: z.string().url().nullable().optional(),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
   hexIds: z.array(z.string().min(1)).min(10).max(5000)
+});
+
+export const hexOfferSchema = z.object({
+  targetHexId: z.string().uuid(),
+  amountCents: z.number().int().min(100).max(100_000_000),
+  message: z.string().trim().max(240).default("")
+});
+
+export const offerActionSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("accept") }),
+  z.object({ action: z.literal("reject") }),
+  z.object({ action: z.literal("cancel") }),
+  z.object({ action: z.literal("counter"), amountCents: z.number().int().min(100).max(100_000_000) })
+]);
+
+export const tradeOfferSchema = z.object({
+  offeredHexIds: z.array(z.string().uuid()).min(1).max(50),
+  requestedHexIds: z.array(z.string().uuid()).min(1).max(50),
+  extraAmountCents: z.number().int().min(0).max(100_000_000).default(0),
+  message: z.string().trim().max(240).default("")
+});
+
+export const tradeActionSchema = z.object({
+  action: z.enum(["accept", "reject", "cancel"])
 });
 
 export const adminUserSchema = z.object({

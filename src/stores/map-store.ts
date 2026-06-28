@@ -6,7 +6,9 @@ export type SelectedHex = {
   lat: number;
   purchased?: {
     id: string;
+    ownerId?: string;
     ownerName: string;
+    ownerUsername?: string | null;
     ownerImage?: string | null;
     avatarUrl?: string | null;
     ownerFounderNumber?: number | null;
@@ -17,6 +19,7 @@ export type SelectedHex = {
     externalLink?: string | null;
     status?: string;
     priceCents?: number;
+    purchaseDate?: string;
   };
 };
 

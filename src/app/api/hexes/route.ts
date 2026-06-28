@@ -16,7 +16,7 @@ type FeatureCollection = {
 
 type LngLat = [number, number];
 
-type MockHexStatus = "AVAILABLE" | "GREEN_OWNED" | "OWNED" | "FOR_SALE" | "SPECIAL" | "MY_OWNED";
+type MockHexStatus = "AVAILABLE" | "OWNED";
 type PersistedHex = {
   id: string;
   h3Index: string;
@@ -24,6 +24,7 @@ type PersistedHex = {
   ownerId: string;
   owner: {
     displayName: string;
+    username: string;
     avatarUrl: string | null;
     founderNumber: number | null;
     kingdomUnlockedAt: Date | null;
@@ -108,40 +109,15 @@ function mockStatusForCell(cell: string, isLand: boolean): MockHexStatus {
   if (!isLand) return "AVAILABLE";
 
   const bucket = hashCell(cell) % 1000;
-  if (bucket < 8) return "SPECIAL";
-  if (bucket < 28) return "FOR_SALE";
-  if (bucket < 62) return "MY_OWNED";
-  if (bucket < 118) return "GREEN_OWNED";
-  if (bucket < 190) return "OWNED";
+  if (bucket < 150) return "OWNED";
   return "AVAILABLE";
 }
 
 function mockOwnerForStatus(status: MockHexStatus, cell: string) {
-  if (status === "MY_OWNED") {
-    return {
-      ownerId: "mock-current-user",
-      ownerName: "My Territory"
-    };
-  }
-
   if (status === "OWNED") {
     return {
       ownerId: `mock-owner-${hashCell(cell) % 32}`,
-      ownerName: `Founder ${hashCell(cell) % 32}`
-    };
-  }
-
-  if (status === "GREEN_OWNED") {
-    return {
-      ownerId: `mock-guild-${hashCell(cell) % 18}`,
-      ownerName: `Guild ${hashCell(cell) % 18}`
-    };
-  }
-
-  if (status === "SPECIAL") {
-    return {
-      ownerId: "mock-special",
-      ownerName: "World Wonder"
+      ownerName: `Earth Owner ${hashCell(cell) % 32}`
     };
   }
 
@@ -261,7 +237,7 @@ function cellToPolygonFeature(cell: string, persistedHex?: PersistedHex, current
   const status: MockHexStatus | string = persistedHex
     ? persistedHex.ownerId === currentUserId
       ? "MY_OWNED"
-      : persistedHex.status
+      : "OWNED"
     : mockStatus;
   const owner = persistedHex
     ? {
@@ -288,6 +264,7 @@ function cellToPolygonFeature(cell: string, persistedHex?: PersistedHex, current
       isOcean: !isLand,
       ownerId: owner.ownerId,
       ownerName: owner.ownerName,
+      ownerUsername: persistedHex?.owner.username ?? null,
       ownerImage: persistedHex?.avatarUrl ?? persistedHex?.owner.avatarUrl ?? null,
       ownerFounderNumber: persistedHex?.owner.founderNumber ?? null,
       ownerKingdomUnlocked: Boolean(persistedHex?.owner.kingdomUnlockedAt),
@@ -380,6 +357,7 @@ export async function GET(request: Request) {
           owner: {
             select: {
               displayName: true,
+              username: true,
               avatarUrl: true,
               founderNumber: true,
               kingdomUnlockedAt: true

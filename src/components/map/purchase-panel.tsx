@@ -1,13 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { gridDisk } from "h3-js";
 import { useSession } from "next-auth/react";
-import { Award, CheckCircle2, Loader2, MapPin, ShoppingCart, Tag, X } from "lucide-react";
+import { Award, CheckCircle2, Loader2, MapPin, ShoppingCart, X } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { FounderBadge } from "@/components/founder-badge";
-import { KingdomBadge } from "@/components/kingdom-badge";
-import { GamificationBadges } from "@/components/gamification-badges";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,7 +11,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { money } from "@/lib/utils";
 import { DEMO_USER, isClientDemoMode } from "@/lib/demo";
 import { buyDemoHex, getDemoOwnedHexes, updateDemoHexMetadata } from "@/lib/demo-storage";
-import { getUserBadges } from "@/lib/gamification";
 import { redirectToSignIn } from "@/lib/client-auth";
 import { useMapStore } from "@/stores/map-store";
 
@@ -57,8 +52,6 @@ function CertificateCard({ certificate }: { certificate: Certificate }) {
           <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-stone-500">Certificate of Ownership</p>
           <div className="mt-1 flex flex-wrap items-center gap-2">
             <h3 className="text-xl font-bold">{certificate.ownerName}</h3>
-            <FounderBadge founderNumber={certificate.ownerFounderNumber} />
-            <KingdomBadge unlocked={certificate.ownerKingdomUnlocked} />
           </div>
         </div>
         <Award className="h-9 w-9 text-amber-600" />
@@ -79,32 +72,6 @@ function CertificateCard({ certificate }: { certificate: Certificate }) {
   );
 }
 
-function MergeAnimation({ adjacentCount, onComplete }: { adjacentCount: number; onComplete: () => void }) {
-  useEffect(() => {
-    const timer = window.setTimeout(onComplete, 2200);
-    return () => window.clearTimeout(timer);
-  }, [onComplete]);
-
-  return (
-    <div className="pointer-events-none absolute inset-0 z-50 grid place-items-center bg-black/35 backdrop-blur-sm">
-      <div className="text-center">
-        <div className="merge-stage" aria-hidden="true">
-          <span className="merge-cell merge-cell-1" />
-          <span className="merge-cell merge-cell-2" />
-          <span className="merge-cell merge-cell-3" />
-          <span className="merge-cell merge-cell-4" />
-          <span className="merge-cell merge-cell-5" />
-          <span className="merge-cell merge-cell-6" />
-          <span className="merge-cell merge-cell-core" />
-        </div>
-        <p className="merge-label mt-3 text-sm font-semibold text-emerald-200">
-          Merged with {adjacentCount} adjacent {adjacentCount === 1 ? "hex" : "hexes"}
-        </p>
-      </div>
-    </div>
-  );
-}
-
 export function PurchasePanel() {
   const { status: authenticationStatus } = useSession();
   const selectedHex = useMapStore((state) => state.selectedHex);
@@ -119,21 +86,12 @@ export function PurchasePanel() {
   const [error, setError] = useState<string | null>(null);
   const [certificate, setCertificate] = useState<Certificate | null>(null);
   const [checkoutStatus, setCheckoutStatus] = useState<string | null>(null);
-  const [mergeCount, setMergeCount] = useState<number | null>(null);
 
   const purchased = selectedHex?.purchased;
   const status = purchased?.status ?? "AVAILABLE";
   const isOwnHex = status === "MY_OWNED";
   const price = purchased?.priceCents ?? 100;
   const coordinates = selectedHex ? coordinateLabel(selectedHex.lat, selectedHex.lng) : "";
-  const demoOwnedHexes = isClientDemoMode ? getDemoOwnedHexes().filter((hex) => hex.ownerId === DEMO_USER.id) : [];
-  const demoBadges = isClientDemoMode ? getUserBadges({
-    id: DEMO_USER.id,
-    name: DEMO_USER.name,
-    founderNumber: DEMO_USER.founderNumber,
-    ownedHexes: demoOwnedHexes,
-    marketplaceListings: demoOwnedHexes.filter((hex) => hex.forSale).length
-  }) : [];
 
   const previewStyle = useMemo(() => {
     if (!selectedHex) return {};
@@ -141,9 +99,7 @@ export function PurchasePanel() {
       background:
         status === "AVAILABLE"
           ? "linear-gradient(135deg, rgba(15,23,42,0.92), rgba(30,41,59,0.88))"
-          : status === "FOR_SALE"
-            ? "linear-gradient(135deg, rgba(251,191,36,0.92), rgba(180,83,9,0.85))"
-            : "linear-gradient(135deg, rgba(37,99,235,0.92), rgba(88,28,135,0.85))"
+          : "linear-gradient(135deg, rgba(37,99,235,0.92), rgba(88,28,135,0.85))"
     };
   }, [selectedHex, status]);
 
@@ -193,13 +149,11 @@ export function PurchasePanel() {
               message: data.certificate.message,
               imageUrl: data.certificate.imageUrl,
               status: "MY_OWNED",
-              priceCents: data.certificate.priceCents
+              priceCents: data.certificate.priceCents,
+              purchaseDate: data.certificate.purchaseDate
             }
           });
           refresh();
-          if ((data.certificate.adjacentOwnedCount ?? 0) > 0) {
-            setMergeCount(data.certificate.adjacentOwnedCount ?? null);
-          }
           setCheckoutStatus("Payment complete");
           window.history.replaceState(null, "", window.location.pathname);
           return;
@@ -253,9 +207,6 @@ export function PurchasePanel() {
         return;
       }
 
-      const neighborIndexes = new Set(gridDisk(selectedHex.h3Index, 1));
-      neighborIndexes.delete(selectedHex.h3Index);
-      const adjacentOwnedCount = existingOwned.filter((hex) => neighborIndexes.has(hex.h3Index)).length;
       const id = `demo-${selectedHex.h3Index}`;
       buyDemoHex({
         h3Index: selectedHex.h3Index,
@@ -280,8 +231,7 @@ export function PurchasePanel() {
         imageUrl: imageUrl || null,
         externalLink: externalLink || null,
         priceCents: price,
-        purchaseDate,
-        adjacentOwnedCount
+        purchaseDate
       };
       setCertificate(demoCertificate);
       setSelectedHex({
@@ -298,12 +248,12 @@ export function PurchasePanel() {
               imageUrl: imageUrl || null,
               externalLink: externalLink || null,
           status: "MY_OWNED",
-          priceCents: price
+          priceCents: price,
+          purchaseDate
         }
       });
       setBusy(false);
       refresh();
-      if (adjacentOwnedCount > 0) setMergeCount(adjacentOwnedCount);
       return;
     }
 
@@ -381,7 +331,6 @@ export function PurchasePanel() {
 
   return (
     <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm">
-      {mergeCount ? <MergeAnimation adjacentCount={mergeCount} onComplete={() => setMergeCount(null)} /> : null}
       <div className="max-h-[calc(100vh-7rem)] w-[min(520px,calc(100vw-2rem))] overflow-auto rounded-lg border border-cyan-200/20 bg-card/95 p-5 shadow-2xl shadow-black/50">
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
@@ -396,7 +345,6 @@ export function PurchasePanel() {
               setCertificate(null);
               setCheckoutStatus(null);
               setError(null);
-              setMergeCount(null);
             }}
             type="button"
           >
@@ -437,6 +385,10 @@ export function PurchasePanel() {
                   <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Price</p>
                   <p className="mt-1 text-2xl font-bold">{money(price)}</p>
                 </div>
+                <div>
+                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Owner</p>
+                  <p className="mt-1 font-medium">{purchased ? purchased.ownerName : "Available"}</p>
+                </div>
               </div>
             </div>
 
@@ -450,17 +402,16 @@ export function PurchasePanel() {
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="font-medium">{purchased.ownerName}</p>
-                      <FounderBadge founderNumber={purchased.ownerFounderNumber} compact />
-                      <KingdomBadge unlocked={purchased.ownerKingdomUnlocked} compact />
                     </div>
-                    <p className="text-xs text-muted-foreground">{status === "FOR_SALE" ? "Listed for resale" : "Owned"}</p>
+                    <p className="text-xs text-muted-foreground">@{purchased.ownerUsername || purchased.ownerName}</p>
+                    <p className="text-xs text-muted-foreground">Owned permanently</p>
                   </div>
                 </div>
-                {isClientDemoMode && status === "MY_OWNED" ? <GamificationBadges badges={demoBadges} compact /> : null}
                 {purchased.title ? <h3 className="text-lg font-semibold">{purchased.title}</h3> : null}
                 {purchased.message ? <p className="mt-3 text-sm text-muted-foreground">{purchased.message}</p> : null}
                 {purchased.imageUrl ? <img src={purchased.imageUrl} alt="" className="mt-3 aspect-video w-full rounded-md object-cover" /> : null}
                 {purchased.externalLink ? <a href={purchased.externalLink} target="_blank" rel="noreferrer" className="text-sm font-medium text-primary underline">Visit link</a> : null}
+                {purchased.purchaseDate ? <p className="text-xs text-muted-foreground">Purchased {new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(purchased.purchaseDate))}</p> : null}
                 {isOwnHex ? (
                   <div className="space-y-3 border-t border-border pt-3">
                     <div className="space-y-1.5"><Label htmlFor="owned-title">Title</Label><Input id="owned-title" maxLength={80} value={title} onChange={(event) => setTitle(event.target.value)} /></div>
@@ -502,12 +453,12 @@ export function PurchasePanel() {
 
             {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
-            {purchased && status !== "FOR_SALE" && status !== "AVAILABLE" ? (
-              <p className="text-sm text-muted-foreground">This hex is already claimed. Watch the marketplace for resale listings.</p>
+            {purchased ? (
+              <p className="text-sm text-muted-foreground">This collectible belongs permanently to its owner.</p>
             ) : (
               <Button className="w-full" onClick={checkout} disabled={busy}>
-                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : purchased ? <Tag className="h-4 w-4" /> : <ShoppingCart className="h-4 w-4" />}
-                {busy ? "Starting checkout..." : purchased ? "Buy resale hex" : "Buy hex for $1"}
+                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShoppingCart className="h-4 w-4" />}
+                {busy ? "Starting checkout..." : "Buy hex for $1"}
               </Button>
             )}
           </div>

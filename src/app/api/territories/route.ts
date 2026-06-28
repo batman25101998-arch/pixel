@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { isDemoMode } from "@/lib/env";
+import { cellToLatLng } from "h3-js";
 
 function territoryLevel(hexCount: number) {
   if (hexCount >= 5000) return "EMPIRE" as const;
@@ -38,26 +39,36 @@ export async function GET() {
       type: "FeatureCollection",
       features: territories
         .filter((territory) => territory.hexes.length > 0)
-        .map((territory) => ({
-          type: "Feature",
-          id: territory.id,
-          geometry: territoryGeometry(territory.hexes.map((hex) => hex.h3Index)),
-          properties: {
+        .map((territory, rank) => {
+          const centers = territory.hexes.map((hex) => cellToLatLng(hex.h3Index));
+          const center = centers.reduce(
+            (sum, [latitude, longitude]) => [sum[0] + latitude, sum[1] + longitude] as [number, number],
+            [0, 0] as [number, number]
+          );
+          return {
+            type: "Feature",
             id: territory.id,
-            name: territory.name,
-            flag: territory.flag,
-            color: territory.color,
-            description: territory.description,
-            bannerImageUrl: territory.bannerImageUrl,
-            flagUrl: territory.flagUrl,
-            ownerName: territory.owner.displayName,
-            ownerFounderNumber: territory.owner.founderNumber,
-            ownerKingdomUnlocked: Boolean(territory.owner.kingdomUnlockedAt),
-            level: territory.level,
-            hexCount: territory._count.hexes,
-            statistics: territory.statistics
-          }
-        }))
+            geometry: territoryGeometry(territory.hexes.map((hex) => hex.h3Index)),
+            properties: {
+              id: territory.id,
+              name: territory.name,
+              flag: territory.flag,
+              color: territory.color,
+              description: territory.description,
+              bannerImageUrl: territory.bannerImageUrl,
+              flagUrl: territory.flagUrl,
+              ownerName: territory.owner.displayName,
+              ownerFounderNumber: territory.owner.founderNumber,
+              ownerKingdomUnlocked: Boolean(territory.owner.kingdomUnlockedAt),
+              level: territory.level,
+              hexCount: territory._count.hexes,
+              statistics: territory.statistics,
+              rank: rank + 1,
+              centerLatitude: center[0] / centers.length,
+              centerLongitude: center[1] / centers.length
+            }
+          };
+        })
     };
 
     return NextResponse.json({ territories, geojson });

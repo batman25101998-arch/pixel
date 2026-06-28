@@ -68,10 +68,23 @@ enum MarketplaceStatus {
 enum TransactionType {
   PRIMARY_PURCHASE
   RESALE_PURCHASE
+  OFFER_PURCHASE
+  HEX_TRADE
   TERRITORY_TRANSFER
   ADMIN_ADJUSTMENT
 
   @@map("transaction_type")
+}
+
+enum OfferStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  COUNTERED
+  CANCELLED
+  EXPIRED
+
+  @@map("offer_status")
 }
 
 enum TransactionStatus {
@@ -122,6 +135,10 @@ model User {
   listings     MarketplaceListing[]
   badges       Badge[]
   adminActions AdminAuditLog[]      @relation("AdminActor")
+  sentHexOffers     HexOffer[]      @relation("HexOfferSender")
+  receivedHexOffers HexOffer[]      @relation("HexOfferRecipient")
+  sentTradeOffers   HexTradeOffer[] @relation("HexTradeOfferSender")
+  receivedTradeOffers HexTradeOffer[] @relation("HexTradeOfferRecipient")
 
   @@index([role, createdAt])
   @@index([displayName])
@@ -175,6 +192,7 @@ model Hex {
   territory    Territory?           @relation(fields: [territoryId], references: [id], onDelete: SetNull)
   listings     MarketplaceListing[]
   transactions Transaction[]
+  offers       HexOffer[]
 
   @@index([ownerId, purchaseDate(sort: Desc)])
   @@index([ownerId, countryCode])
@@ -183,6 +201,49 @@ model Hex {
   @@index([latitude, longitude])
   @@index([status, updatedAt])
   @@map("hexes")
+}
+
+model HexOffer {
+  id          String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  fromUserId  String      @map("from_user_id") @db.Uuid
+  toUserId    String      @map("to_user_id") @db.Uuid
+  targetHexId String      @map("target_hex_id") @db.Uuid
+  amountCents BigInt      @map("amount_cents")
+  status      OfferStatus @default(PENDING)
+  message     String      @default("") @db.VarChar(240)
+  createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+  expiresAt   DateTime    @map("expires_at") @db.Timestamptz(6)
+
+  fromUser User @relation("HexOfferSender", fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUser   User @relation("HexOfferRecipient", fields: [toUserId], references: [id], onDelete: Cascade)
+  targetHex Hex @relation(fields: [targetHexId], references: [id], onDelete: Cascade)
+
+  @@index([toUserId, status, createdAt(sort: Desc)])
+  @@index([fromUserId, status, createdAt(sort: Desc)])
+  @@index([targetHexId, status])
+  @@map("hex_offers")
+}
+
+model HexTradeOffer {
+  id               String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  fromUserId       String      @map("from_user_id") @db.Uuid
+  toUserId         String      @map("to_user_id") @db.Uuid
+  offeredHexIds    String[]    @map("offered_hex_ids") @db.Uuid
+  requestedHexIds  String[]    @map("requested_hex_ids") @db.Uuid
+  extraAmountCents BigInt      @default(0) @map("extra_amount_cents")
+  status           OfferStatus @default(PENDING)
+  message          String      @default("") @db.VarChar(240)
+  createdAt        DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+  expiresAt        DateTime    @map("expires_at") @db.Timestamptz(6)
+
+  fromUser User @relation("HexTradeOfferSender", fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUser   User @relation("HexTradeOfferRecipient", fields: [toUserId], references: [id], onDelete: Cascade)
+
+  @@index([toUserId, status, createdAt(sort: Desc)])
+  @@index([fromUserId, status, createdAt(sort: Desc)])
+  @@map("hex_trade_offers")
 }
 
 model Territory {
