@@ -78,3 +78,23 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Image upload failed." }, { status: 500 });
   }
 }
+
+export async function DELETE(request: Request) {
+  const session = await auth();
+  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+
+  try {
+    const hexId = new URL(request.url).searchParams.get("hexId");
+    if (!hexId) return NextResponse.json({ error: "Hex ID is required." }, { status: 400 });
+    const hex = await prisma.hex.findUnique({ where: { id: hexId }, select: { id: true, ownerId: true } });
+    if (!hex) return NextResponse.json({ error: "Hex not found." }, { status: 404 });
+    if (hex.ownerId !== session.user.id) {
+      return NextResponse.json({ error: "Only the hex owner can remove its image." }, { status: 403 });
+    }
+    await prisma.hex.update({ where: { id: hex.id }, data: { imageUrl: null } });
+    return NextResponse.json({ imageUrl: null });
+  } catch (error) {
+    console.error("[hex-image-upload] Remove failed", error);
+    return NextResponse.json({ error: "Image could not be removed." }, { status: 500 });
+  }
+}

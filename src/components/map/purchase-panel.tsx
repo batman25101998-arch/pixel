@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react";
 import { Award, CheckCircle2, ImageUp, Loader2, MapPin, ShoppingCart, X } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { HexImageUpload } from "@/components/hex-image-upload";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -12,6 +13,7 @@ import { money } from "@/lib/utils";
 import { DEMO_USER, isClientDemoMode } from "@/lib/demo";
 import { buyDemoHex, getDemoOwnedHexes, updateDemoHexMetadata } from "@/lib/demo-storage";
 import { redirectToSignIn } from "@/lib/client-auth";
+import { getPendingHexImage, removePendingHexImage, savePendingHexImage } from "@/lib/pending-hex-image";
 import { useMapStore } from "@/stores/map-store";
 
 type Certificate = {
@@ -87,10 +89,9 @@ export function PurchasePanel() {
   const [certificate, setCertificate] = useState<Certificate | null>(null);
   const [checkoutStatus, setCheckoutStatus] = useState<string | null>(null);
   const touchStartY = useRef<number | null>(null);
-  const imageInputRef = useRef<HTMLInputElement | null>(null);
-  const [selectedImage, setSelectedImage] = useState<File | null>(null);
-  const [selectedImagePreview, setSelectedImagePreview] = useState<string | null>(null);
-  const [uploadingImage, setUploadingImage] = useState(false);
+  const purchaseImageInputRef = useRef<HTMLInputElement | null>(null);
+  const [purchaseImage, setPurchaseImage] = useState<File | null>(null);
+  const [purchaseImagePreview, setPurchaseImagePreview] = useState<string | null>(null);
 
   const purchased = selectedHex?.purchased;
   const status = purchased?.status ?? "AVAILABLE";
@@ -111,9 +112,9 @@ export function PurchasePanel() {
   useEffect(() => {
     if (!selectedHex) return;
     setError(null);
-    setSelectedImage(null);
-    setSelectedImagePreview(null);
-    if (imageInputRef.current) imageInputRef.current.value = "";
+    setPurchaseImage(null);
+    setPurchaseImagePreview(null);
+    if (purchaseImageInputRef.current) purchaseImageInputRef.current.value = "";
     const saved = isClientDemoMode ? getDemoOwnedHexes().find((hex) => hex.h3Index === selectedHex.h3Index) : null;
     setTitle(saved?.title ?? selectedHex.purchased?.title ?? "");
     setMessage(saved?.message ?? selectedHex.purchased?.message ?? "");
@@ -124,9 +125,23 @@ export function PurchasePanel() {
 
   useEffect(() => {
     return () => {
-      if (selectedImagePreview) URL.revokeObjectURL(selectedImagePreview);
+      if (purchaseImagePreview) URL.revokeObjectURL(purchaseImagePreview);
     };
-  }, [selectedImagePreview]);
+  }, [purchaseImagePreview]);
+
+  async function attachPendingImage(nextCertificate: Certificate) {
+    const pendingImage = await getPendingHexImage(nextCertificate.h3Index);
+    if (!pendingImage) return nextCertificate;
+    setCheckoutStatus("Uploading your image...");
+    const formData = new FormData();
+    formData.set("hexId", nextCertificate.id);
+    formData.set("file", pendingImage);
+    const response = await fetch("/api/upload/hex-image", { method: "POST", body: formData });
+    const data = (await response.json()) as { imageUrl?: string; error?: string };
+    if (!response.ok || !data.imageUrl) throw new Error(data.error ?? "Your purchase succeeded, but the image could not be uploaded.");
+    await removePendingHexImage(nextCertificate.h3Index);
+    return { ...nextCertificate, imageUrl: data.imageUrl };
+  }
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -148,23 +163,30 @@ export function PurchasePanel() {
 
         if (cancelled) return;
         if (data.status === "SUCCEEDED" && data.certificate) {
-          setCertificate(data.certificate);
+          let confirmedCertificate = data.certificate;
+          try {
+            confirmedCertificate = await attachPendingImage(confirmedCertificate);
+          } catch (uploadError) {
+            setError(uploadError instanceof Error ? uploadError.message : "Your purchase succeeded, but the image could not be uploaded.");
+          }
+          if (cancelled) return;
+          setCertificate(confirmedCertificate);
           setSelectedHex({
-            h3Index: data.certificate.h3Index,
-            lng: data.certificate.longitude,
-            lat: data.certificate.latitude,
+            h3Index: confirmedCertificate.h3Index,
+            lng: confirmedCertificate.longitude,
+            lat: confirmedCertificate.latitude,
             purchased: {
-              id: data.certificate.id,
-               ownerName: data.certificate.ownerName,
-               ownerImage: data.certificate.ownerImage,
-               avatarUrl: data.certificate.avatarUrl,
-              ownerFounderNumber: data.certificate.ownerFounderNumber,
-              ownerKingdomUnlocked: data.certificate.ownerKingdomUnlocked,
-              message: data.certificate.message,
-              imageUrl: data.certificate.imageUrl,
+              id: confirmedCertificate.id,
+              ownerName: confirmedCertificate.ownerName,
+              ownerImage: confirmedCertificate.ownerImage,
+              avatarUrl: confirmedCertificate.avatarUrl,
+              ownerFounderNumber: confirmedCertificate.ownerFounderNumber,
+              ownerKingdomUnlocked: confirmedCertificate.ownerKingdomUnlocked,
+              message: confirmedCertificate.message,
+              imageUrl: confirmedCertificate.imageUrl,
               status: "MY_OWNED",
-              priceCents: data.certificate.priceCents,
-              purchaseDate: data.certificate.purchaseDate
+              priceCents: confirmedCertificate.priceCents,
+              purchaseDate: confirmedCertificate.purchaseDate
             }
           });
           refresh();
@@ -271,6 +293,16 @@ export function PurchasePanel() {
       return;
     }
 
+    if (purchaseImage) {
+      try {
+        await savePendingHexImage(selectedHex.h3Index, purchaseImage);
+      } catch {
+        setBusy(false);
+        setError("The selected image could not be prepared for checkout.");
+        return;
+      }
+    }
+
     const response = await fetch("/api/checkout", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -343,51 +375,33 @@ export function PurchasePanel() {
     }
   }
 
-  function chooseImage(file: File | undefined) {
-    if (selectedImagePreview) URL.revokeObjectURL(selectedImagePreview);
-    setSelectedImage(null);
-    setSelectedImagePreview(null);
+  function applyUploadedImage(nextImageUrl: string | null) {
+    setImageUrl(nextImageUrl ?? "");
+    if (selectedHex?.purchased) {
+      setSelectedHex({
+        ...selectedHex,
+        purchased: { ...selectedHex.purchased, imageUrl: nextImageUrl }
+      });
+    }
+    setCertificate((current) => current ? { ...current, imageUrl: nextImageUrl } : current);
+    refresh();
+  }
+
+  function choosePurchaseImage(file?: File) {
+    setPurchaseImage(null);
+    setPurchaseImagePreview(null);
     setError(null);
     if (!file) return;
     if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
       setError("Use a JPEG, PNG, or WebP image.");
       return;
     }
-    if (file.size > 5 * 1024 * 1024) {
+    if (file.size <= 0 || file.size > 5 * 1024 * 1024) {
       setError("Image must be smaller than 5MB.");
       return;
     }
-    setSelectedImage(file);
-    setSelectedImagePreview(URL.createObjectURL(file));
-  }
-
-  async function uploadImage() {
-    if (!selectedHex?.purchased?.id || !isOwnHex || !selectedImage) return;
-    setUploadingImage(true);
-    setError(null);
-    try {
-      const formData = new FormData();
-      formData.set("hexId", selectedHex.purchased.id);
-      formData.set("file", selectedImage);
-      const response = await fetch("/api/upload/hex-image", { method: "POST", body: formData });
-      const data = (await response.json()) as { imageUrl?: string; error?: string };
-      if (!response.ok || !data.imageUrl) throw new Error(data.error ?? "Image could not be uploaded.");
-
-      setImageUrl(data.imageUrl);
-      setSelectedHex({
-        ...selectedHex,
-        purchased: { ...selectedHex.purchased, imageUrl: data.imageUrl }
-      });
-      if (selectedImagePreview) URL.revokeObjectURL(selectedImagePreview);
-      setSelectedImage(null);
-      setSelectedImagePreview(null);
-      if (imageInputRef.current) imageInputRef.current.value = "";
-      refresh();
-    } catch (uploadError) {
-      setError(uploadError instanceof Error ? uploadError.message : "Image could not be uploaded.");
-    } finally {
-      setUploadingImage(false);
-    }
+    setPurchaseImage(file);
+    setPurchaseImagePreview(URL.createObjectURL(file));
   }
 
   function closePanel() {
@@ -440,6 +454,8 @@ export function PurchasePanel() {
               {isClientDemoMode ? "Demo purchase complete. Your hex is saved in this browser." : "Payment confirmed. Your hex is now owned and saved."}
             </div>
             <CertificateCard certificate={certificate} />
+            <HexImageUpload hexId={certificate.id} imageUrl={certificate.imageUrl} disabled={isClientDemoMode} onImageChange={applyUploadedImage} />
+            {error ? <p className="text-sm text-destructive">{error}</p> : null}
           </div>
         ) : selectedHex ? (
           <div className="space-y-4">
@@ -494,30 +510,7 @@ export function PurchasePanel() {
                       <div className="space-y-1.5"><Label htmlFor="owned-avatar">Avatar URL</Label><Input id="owned-avatar" value={avatarUrl} onChange={(event) => setAvatarUrl(event.target.value)} /></div>
                       <div className="space-y-1.5"><Label htmlFor="owned-image">Image URL</Label><Input id="owned-image" type="url" value={imageUrl} onChange={(event) => setImageUrl(event.target.value)} placeholder="https://..." /></div>
                     </div>
-                    <div className="space-y-2 rounded-md border border-border bg-background p-3">
-                      <div>
-                        <p className="text-sm font-medium">Upload an image</p>
-                        <p className="text-xs text-muted-foreground">JPEG, PNG, or WebP. Maximum 5MB.</p>
-                      </div>
-                      <input
-                        ref={imageInputRef}
-                        type="file"
-                        accept="image/jpeg,image/png,image/webp"
-                        className="sr-only"
-                        onChange={(event) => chooseImage(event.target.files?.[0])}
-                      />
-                      <div className="flex flex-col gap-2 sm:flex-row">
-                        <Button type="button" variant="outline" className="w-full" disabled={uploadingImage || isClientDemoMode} onClick={() => imageInputRef.current?.click()}>
-                          <ImageUp className="h-4 w-4" /> Choose image
-                        </Button>
-                        <Button type="button" className="w-full" disabled={!selectedImage || uploadingImage || isClientDemoMode} onClick={uploadImage}>
-                          {uploadingImage ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImageUp className="h-4 w-4" />}
-                          {uploadingImage ? "Uploading..." : "Upload image"}
-                        </Button>
-                      </div>
-                      {isClientDemoMode ? <p className="text-xs text-muted-foreground">Direct uploads require production storage. Image URLs still work in demo mode.</p> : null}
-                      {selectedImagePreview ? <img src={selectedImagePreview} alt="Selected image preview" className="aspect-video w-full rounded-md object-cover" /> : null}
-                    </div>
+                    <HexImageUpload hexId={purchased.id} imageUrl={imageUrl || null} disabled={isClientDemoMode} onImageChange={applyUploadedImage} />
                     <div className="space-y-1.5"><Label htmlFor="owned-link">External link</Label><Input id="owned-link" type="url" value={externalLink} onChange={(event) => setExternalLink(event.target.value)} /></div>
                     {avatarUrl ? <img src={avatarUrl} alt="Avatar preview" className="h-12 w-12 rounded-full object-cover" /> : null}
                     {imageUrl ? <img src={imageUrl} alt="Image preview" className="aspect-video w-full rounded-md object-cover" /> : null}
@@ -544,6 +537,18 @@ export function PurchasePanel() {
                     <Label htmlFor="image">Image URL</Label>
                     <Input id="image" value={imageUrl} onChange={(event) => setImageUrl(event.target.value)} placeholder="https://..." />
                   </div>
+                </div>
+                <div className="space-y-3 rounded-md border border-border bg-background p-3">
+                  <div>
+                    <p className="text-sm font-medium">Add an image from your device</p>
+                    <p className="text-xs text-muted-foreground">It will upload automatically after your purchase is confirmed.</p>
+                  </div>
+                  <input ref={purchaseImageInputRef} type="file" accept="image/*" className="sr-only" onChange={(event) => choosePurchaseImage(event.target.files?.[0])} />
+                  <Button type="button" variant="outline" className="h-11 w-full" disabled={busy || isClientDemoMode} onClick={() => purchaseImageInputRef.current?.click()}>
+                    <ImageUp className="h-4 w-4" /> Choose image
+                  </Button>
+                  {purchaseImagePreview ? <img src={purchaseImagePreview} alt="Purchase image preview" className="aspect-video w-full rounded-md object-cover" /> : null}
+                  {purchaseImage ? <p className="truncate text-xs text-muted-foreground">{purchaseImage.name}</p> : null}
                 </div>
                 <div className="space-y-1.5"><Label htmlFor="external-link">External link</Label><Input id="external-link" type="url" value={externalLink} onChange={(event) => setExternalLink(event.target.value)} placeholder="https://..." /></div>
               </div>
