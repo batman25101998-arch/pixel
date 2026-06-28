@@ -340,7 +340,7 @@ export function PurchasePanel() {
   return (
     <div className="absolute inset-0 z-30 flex items-end justify-center bg-black/25 md:items-center md:bg-black/45 md:p-4 md:backdrop-blur-sm">
       <div
-        className="max-h-[84dvh] w-full overflow-y-auto overscroll-contain rounded-t-xl border border-b-0 border-cyan-200/20 bg-card/98 p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl shadow-black/50 md:max-h-[calc(100vh-7rem)] md:w-[min(520px,calc(100vw-2rem))] md:rounded-lg md:border-b md:bg-card/95"
+        className="max-h-[84dvh] w-full overflow-y-auto overscroll-contain rounded-t-xl border border-b-0 border-cyan-200/20 bg-[#0b1117] p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl shadow-black/50 md:max-h-[calc(100vh-7rem)] md:w-[min(520px,calc(100vw-2rem))] md:rounded-lg md:border-b"
         onTouchStart={(event) => {
           touchStartY.current = event.touches[0]?.clientY ?? null;
         }}
@@ -470,7 +470,7 @@ export function PurchasePanel() {
             {purchased ? (
               <p className="text-sm text-muted-foreground">This collectible belongs permanently to its owner.</p>
             ) : (
-              <div className="sticky bottom-[-1.25rem] z-10 -mx-5 -mb-5 border-t border-border bg-card/98 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] md:static md:m-0 md:border-0 md:bg-transparent md:p-0">
+              <div className="sticky bottom-[-1.25rem] z-10 -mx-5 -mb-5 border-t border-border bg-[#0b1117] p-4 pb-[max(1rem,env(safe-area-inset-bottom))] md:static md:m-0 md:border-0 md:bg-transparent md:p-0">
                 <Button className="h-12 w-full md:h-10" onClick={checkout} disabled={busy}>
                   {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShoppingCart className="h-4 w-4" />}
                   {busy ? "Starting checkout..." : "Buy hex for $1"}

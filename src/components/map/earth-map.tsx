@@ -672,6 +672,12 @@ export function EarthMap() {
         const props = features[0].properties as Record<string, string | number | null>;
         const selection = selectedHexFromProperties(props);
         setSelectedHex(selection);
+        map.flyTo({
+          center: [selection.lng, selection.lat],
+          zoom: Math.max(map.getZoom(), window.innerWidth < 768 ? 7 : 6),
+          duration: 900,
+          essential: true
+        });
         if (!isClientDemoMode) {
           void loadPersistedSelection(selection)
             .then((persistedSelection) => {
@@ -693,6 +699,12 @@ export function EarthMap() {
       const data = await response.json();
       const selection = { h3Index: data.h3Index, lng: event.lngLat.lng, lat: event.lngLat.lat };
       setSelectedHex(selection);
+      map.flyTo({
+        center: [selection.lng, selection.lat],
+        zoom: Math.max(map.getZoom(), window.innerWidth < 768 ? 7 : 6),
+        duration: 900,
+        essential: true
+      });
     });
 
     return () => {
