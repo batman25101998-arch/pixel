@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
 import { Award, CheckCircle2, Loader2, MapPin, ShoppingCart, X } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -86,6 +86,7 @@ export function PurchasePanel() {
   const [error, setError] = useState<string | null>(null);
   const [certificate, setCertificate] = useState<Certificate | null>(null);
   const [checkoutStatus, setCheckoutStatus] = useState<string | null>(null);
+  const touchStartY = useRef<number | null>(null);
 
   const purchased = selectedHex?.purchased;
   const status = purchased?.status ?? "AVAILABLE";
@@ -329,9 +330,27 @@ export function PurchasePanel() {
     }
   }
 
+  function closePanel() {
+    setSelectedHex(null);
+    setCertificate(null);
+    setCheckoutStatus(null);
+    setError(null);
+  }
+
   return (
-    <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm">
-      <div className="max-h-[calc(100vh-7rem)] w-[min(520px,calc(100vw-2rem))] overflow-auto rounded-lg border border-cyan-200/20 bg-card/95 p-5 shadow-2xl shadow-black/50">
+    <div className="absolute inset-0 z-30 flex items-end justify-center bg-black/25 md:items-center md:bg-black/45 md:p-4 md:backdrop-blur-sm">
+      <div
+        className="max-h-[84dvh] w-full overflow-y-auto overscroll-contain rounded-t-xl border border-b-0 border-cyan-200/20 bg-card/98 p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl shadow-black/50 md:max-h-[calc(100vh-7rem)] md:w-[min(520px,calc(100vw-2rem))] md:rounded-lg md:border-b md:bg-card/95"
+        onTouchStart={(event) => {
+          touchStartY.current = event.touches[0]?.clientY ?? null;
+        }}
+        onTouchEnd={(event) => {
+          const startY = touchStartY.current;
+          touchStartY.current = null;
+          if (startY !== null && event.changedTouches[0] && event.changedTouches[0].clientY - startY > 100 && event.currentTarget.scrollTop === 0) closePanel();
+        }}
+      >
+        <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-slate-500/70 md:hidden" aria-hidden="true" />
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
             <p className="text-xs uppercase tracking-wide text-muted-foreground">Selected hex</p>
@@ -340,12 +359,7 @@ export function PurchasePanel() {
           <button
             aria-label="Close purchase modal"
             className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-background/70 text-muted-foreground transition hover:bg-accent hover:text-accent-foreground"
-            onClick={() => {
-              setSelectedHex(null);
-              setCertificate(null);
-              setCheckoutStatus(null);
-              setError(null);
-            }}
+            onClick={closePanel}
             type="button"
           >
             <X className="h-4 w-4" />
@@ -456,10 +470,12 @@ export function PurchasePanel() {
             {purchased ? (
               <p className="text-sm text-muted-foreground">This collectible belongs permanently to its owner.</p>
             ) : (
-              <Button className="w-full" onClick={checkout} disabled={busy}>
-                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShoppingCart className="h-4 w-4" />}
-                {busy ? "Starting checkout..." : "Buy hex for $1"}
-              </Button>
+              <div className="sticky bottom-[-1.25rem] z-10 -mx-5 -mb-5 border-t border-border bg-card/98 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] md:static md:m-0 md:border-0 md:bg-transparent md:p-0">
+                <Button className="h-12 w-full md:h-10" onClick={checkout} disabled={busy}>
+                  {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShoppingCart className="h-4 w-4" />}
+                  {busy ? "Starting checkout..." : "Buy hex for $1"}
+                </Button>
+              </div>
             )}
           </div>
         ) : null}

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Earth, LayoutDashboard, Shield, Trophy, UserCircle } from "lucide-react";
+import { Earth, LayoutDashboard, UserCircle } from "lucide-react";
 import { auth } from "@/auth";
 import { Providers } from "@/components/providers";
 import { UserMenu } from "@/components/auth/user-menu";
@@ -10,7 +10,7 @@ import { isDemoMode } from "@/lib/env";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Own a Piece of Earth",
+  title: "Own a Hex of Earth",
   description: "Own and customize a permanent collectible hex on the world map."
 };
 
@@ -20,25 +20,21 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
     <html lang="en" className="dark">
       <body>
         <Providers session={session}>
-          <header className="fixed inset-x-0 top-0 z-40 h-[86px] border-b border-border/70 bg-background/88 backdrop-blur">
-            <div className="mx-auto flex h-[86px] max-w-7xl items-center justify-between px-4">
+          <header className="fixed inset-x-0 top-0 z-40 h-16 border-b border-border/70 bg-background/88 backdrop-blur md:h-[86px]">
+            <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-3 md:h-[86px] md:px-4">
               <Link href="/" className="flex items-center gap-2 font-semibold">
-                <Earth className="h-5 w-5 text-primary" />
-                <span className="hidden sm:inline">Own a Piece of Earth</span>
+                <Earth className="h-6 w-6 text-primary md:h-5 md:w-5" />
+                <span className="hidden sm:inline">Own a Hex of Earth</span>
               </Link>
               <nav className="hidden items-center gap-1 md:flex">
-                <Button asChild variant="ghost" size="sm"><Link href="/leaderboard"><Trophy className="h-4 w-4" /> Leaders</Link></Button>
                 <Button asChild variant="ghost" size="sm"><Link href="/profile"><UserCircle className="h-4 w-4" /> Profile</Link></Button>
                 <Button asChild variant="ghost" size="sm"><Link href="/dashboard"><LayoutDashboard className="h-4 w-4" /> Dashboard</Link></Button>
-                {session?.user.role === "ADMIN" ? (
-                  <Button asChild variant="ghost" size="sm"><Link href="/admin"><Shield className="h-4 w-4" /> Admin</Link></Button>
-                ) : null}
               </nav>
               <div className="flex items-center gap-2">
                 {session?.user ? (
                   <>
                     {isDemoMode ? (
-                      <Button asChild size="sm" variant="outline"><Link href="/dashboard">{DEMO_USER.name}</Link></Button>
+                      <Button asChild size="icon" variant="outline" aria-label="Demo profile"><Link href="/profile"><UserCircle className="h-5 w-5" /></Link></Button>
                     ) : (
                       <UserMenu
                         email={session.user.email}
@@ -54,7 +50,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
               </div>
             </div>
           </header>
-          <main className="min-h-screen pt-[86px]">{children}</main>
+          <main className="min-h-screen pt-16 md:pt-[86px]">{children}</main>
         </Providers>
       </body>
     </html>

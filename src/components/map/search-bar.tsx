@@ -128,9 +128,9 @@ export function SearchBar() {
   }
 
   return (
-    <div className="absolute left-4 top-4 z-20 w-[min(500px,calc(100vw-2rem))]">
+    <div className="absolute left-3 right-3 top-3 z-20 md:left-4 md:right-auto md:top-4 md:w-[min(500px,calc(100vw-2rem))]">
       <form onSubmit={submit} className="flex flex-wrap gap-2 rounded-lg border border-border bg-card/95 p-2 shadow-xl backdrop-blur">
-        <Input className="min-w-0 flex-1" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Hex, player, city, country, or lat,lng" aria-label="Search the world map" />
+        <Input id="map-search-input" className="min-w-0 flex-1 text-base md:text-sm" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search a place or hex" aria-label="Search the world map" />
         <Button type="submit" size="icon" aria-label="Search" disabled={loading}>
           {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
         </Button>

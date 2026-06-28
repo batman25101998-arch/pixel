@@ -1,6 +1,7 @@
 "use client";
 
 import { LogOut } from "lucide-react";
+import Link from "next/link";
 import { signOut } from "next-auth/react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -18,10 +19,12 @@ export function UserMenu({ name, username, email, image }: UserMenuProps) {
 
   return (
     <div className="flex min-w-0 items-center gap-2">
-      <Avatar className="h-9 w-9 border border-border">
-        <AvatarImage src={image ?? undefined} alt="" />
-        <AvatarFallback>{initials}</AvatarFallback>
-      </Avatar>
+      <Link href="/profile" aria-label="Open profile">
+        <Avatar className="h-9 w-9 border border-border">
+          <AvatarImage src={image ?? undefined} alt="" />
+          <AvatarFallback>{initials}</AvatarFallback>
+        </Avatar>
+      </Link>
       <div className="hidden min-w-0 max-w-40 leading-tight lg:block">
         <p className="truncate text-sm font-medium">{label}</p>
         {email ? <p className="truncate text-xs text-muted-foreground">{email}</p> : null}

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { cellToBoundary, cellToLatLng, isValidCell } from "h3-js";
 import maplibregl, { Map, type ExpressionSpecification, type StyleSpecification } from "maplibre-gl";
 import { useSession } from "next-auth/react";
-import { Check, Layers3 } from "lucide-react";
+import { Check, Layers3, SlidersHorizontal, X } from "lucide-react";
 import { DEMO_USER, isClientDemoMode } from "@/lib/demo";
 import { getDemoOwnedHexes } from "@/lib/demo-storage";
 import { useMapStore, type SelectedHex } from "@/stores/map-store";
@@ -291,11 +291,6 @@ function hexLineOpacityExpression(): ExpressionSpecification {
 }
 
 type ImagePointCollection = GeoJSON.FeatureCollection<GeoJSON.Point, Record<string, unknown>>;
-type CustomImageTile = {
-  element: HTMLButtonElement;
-  h3Index: string;
-  marker: maplibregl.Marker;
-};
 
 function demoImageCollection(): ImagePointCollection {
   return {
@@ -336,63 +331,96 @@ async function customImageCollectionForMap(map: Map) {
   return (await response.json()) as ImagePointCollection;
 }
 
-function clearCustomImageTiles(tiles: CustomImageTile[]) {
-  for (const tile of tiles) tile.marker.remove();
-  tiles.length = 0;
+function clearCustomImageCanvas(canvas: HTMLCanvasElement | null) {
+  const context = canvas?.getContext("2d");
+  if (canvas && context) context.clearRect(0, 0, canvas.width, canvas.height);
 }
 
-function resizeCustomImageTile(map: Map, tile: CustomImageTile) {
-  const projected = cellToBoundary(tile.h3Index).map(([lat, lng]) => map.project([lng, lat]));
-  const xs = projected.map((point) => point.x);
-  const ys = projected.map((point) => point.y);
-  const width = Math.max(1, Math.max(...xs) - Math.min(...xs));
-  const height = Math.max(1, Math.max(...ys) - Math.min(...ys));
-  tile.element.style.width = `${width}px`;
-  tile.element.style.height = `${height}px`;
-  const zoomProgress = Math.max(0, Math.min(1, (map.getZoom() - 1.2) / 8.8));
-  tile.element.style.setProperty("--hex-image-opacity", String(0.65 + zoomProgress * 0.35));
+function loadCanvasImage(url: string, cache: globalThis.Map<string, HTMLImageElement>) {
+  const cached = cache.get(url);
+  if (cached) return Promise.resolve(cached);
+  return new Promise<HTMLImageElement | null>((resolve) => {
+    const image = new Image();
+    image.decoding = "async";
+    image.onload = () => {
+      cache.set(url, image);
+      resolve(image);
+    };
+    image.onerror = () => resolve(null);
+    image.src = url;
+  });
 }
 
-function renderCustomImageTiles(
+async function renderCustomImageCanvas(
   map: Map,
-  tiles: CustomImageTile[],
+  canvas: HTMLCanvasElement,
   data: ImagePointCollection,
   visible: boolean,
-  selectHex: (hex: SelectedHex | null) => void
+  imageCache: globalThis.Map<string, HTMLImageElement>,
+  isCurrent: () => boolean
 ) {
-  clearCustomImageTiles(tiles);
-  if (!visible) return;
+  const context = canvas.getContext("2d");
+  if (!context) return;
+  const pixelRatio = window.devicePixelRatio || 1;
+  const width = canvas.clientWidth;
+  const height = canvas.clientHeight;
+  if (canvas.width !== Math.round(width * pixelRatio) || canvas.height !== Math.round(height * pixelRatio)) {
+    canvas.width = Math.round(width * pixelRatio);
+    canvas.height = Math.round(height * pixelRatio);
+  }
+  context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+  if (!visible) {
+    context.clearRect(0, 0, width, height);
+    return;
+  }
 
-  for (const feature of data.features.slice(0, 300)) {
+  const drawable = await Promise.all(data.features.slice(0, 300).map(async (feature) => {
     const properties = feature.properties ?? {};
     const imageUrl = properties.imageUrl ? String(properties.imageUrl) : "";
     const h3Index = properties.h3Index ? String(properties.h3Index) : "";
-    if (!imageUrl || !isValidCell(h3Index)) continue;
+    if (!imageUrl || !isValidCell(h3Index)) return null;
+    const image = await loadCanvasImage(imageUrl, imageCache);
+    return image ? { h3Index, image } : null;
+  }));
 
-    const element = document.createElement("button");
-    element.type = "button";
-    element.className = "custom-hex-image-tile";
-    element.title = properties.title ? String(properties.title) : "Open collectible hex";
+  if (!isCurrent()) return;
+  context.clearRect(0, 0, width, height);
+  for (const item of drawable) {
+    if (!item) continue;
+    const points = cellToBoundary(item.h3Index).map(([lat, lng]) => map.project([lng, lat]));
+    if (points.length < 3) continue;
+    const xs = points.map((point) => point.x);
+    const ys = points.map((point) => point.y);
+    const left = Math.min(...xs);
+    const top = Math.min(...ys);
+    const boxWidth = Math.max(...xs) - left;
+    const boxHeight = Math.max(...ys) - top;
+    if (boxWidth <= 0 || boxHeight <= 0) continue;
 
-    const image = document.createElement("img");
-    image.className = "custom-hex-image-tile__image";
-    image.src = imageUrl;
-    image.alt = properties.title ? String(properties.title) : "Custom hex image";
-    image.loading = "lazy";
-    image.decoding = "async";
-    image.referrerPolicy = "no-referrer";
-    element.appendChild(image);
+    const scale = Math.max(boxWidth / item.image.naturalWidth, boxHeight / item.image.naturalHeight);
+    const drawWidth = item.image.naturalWidth * scale;
+    const drawHeight = item.image.naturalHeight * scale;
+    const drawX = left + (boxWidth - drawWidth) / 2;
+    const drawY = top + (boxHeight - drawHeight) / 2;
 
-    element.addEventListener("click", (event) => {
-      event.stopPropagation();
-      selectHex(selectedHexFromProperties(properties as Record<string, string | number | null>));
-    });
+    context.save();
+    context.beginPath();
+    context.moveTo(points[0].x, points[0].y);
+    for (const point of points.slice(1)) context.lineTo(point.x, point.y);
+    context.closePath();
+    context.clip();
+    context.drawImage(item.image, drawX, drawY, drawWidth, drawHeight);
+    context.restore();
 
-    const coordinates = feature.geometry.coordinates as [number, number];
-    const marker = new maplibregl.Marker({ element, anchor: "center" }).setLngLat(coordinates).addTo(map);
-    const tile = { element, h3Index, marker };
-    resizeCustomImageTile(map, tile);
-    tiles.push(tile);
+    context.save();
+    context.beginPath();
+    context.moveTo(points[0].x, points[0].y);
+    for (const point of points.slice(1)) context.lineTo(point.x, point.y);
+    context.closePath();
+    context.strokeStyle = "rgba(134, 239, 172, 0.58)";
+    context.lineWidth = 0.75;
+    context.stroke();
+    context.restore();
   }
 }
 
@@ -402,7 +430,11 @@ export function EarthMap() {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<Map | null>(null);
   const searchMarkerRef = useRef<maplibregl.Marker | null>(null);
-  const customImageTilesRef = useRef<CustomImageTile[]>([]);
+  const customImageCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const customImageDataRef = useRef<ImagePointCollection>({ type: "FeatureCollection", features: [] });
+  const customImageCacheRef = useRef(new globalThis.Map<string, HTMLImageElement>());
+  const imageDrawRef = useRef(0);
+  const [layersOpen, setLayersOpen] = useState(false);
   const requestRef = useRef(0);
   const imageRequestRef = useRef(0);
   const [layerVisibility, setLayerVisibility] = useState<LayerVisibility>({
@@ -428,7 +460,9 @@ export function EarthMap() {
       maxZoom: 19,
       maxPitch: 60,
       renderWorldCopies: false,
-      attributionControl: false
+      attributionControl: false,
+      dragRotate: false,
+      touchPitch: false
     });
 
     mapRef.current = map;
@@ -458,7 +492,8 @@ export function EarthMap() {
       const bbox = [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()].join(",");
 
       try {
-        const response = await fetch(`/api/hexes?bbox=${bbox}&zoom=${Math.round(map.getZoom())}&includeVirtual=1&take=10000`);
+        const take = window.innerWidth < 768 ? 4000 : 10000;
+        const response = await fetch(`/api/hexes?bbox=${bbox}&zoom=${Math.round(map.getZoom())}&includeVirtual=1&take=${take}`);
         const data = await response.json();
         if (requestId !== requestRef.current || !validateGeoJsonResponse(data)) return;
         const source = map.getSource(sourceId) as maplibregl.GeoJSONSource;
@@ -469,20 +504,36 @@ export function EarthMap() {
       }
     }
 
-    async function loadCustomImageTiles() {
+    function drawCustomImages(data = customImageDataRef.current) {
+      const canvas = customImageCanvasRef.current;
+      if (!canvas) return;
+      const drawId = ++imageDrawRef.current;
+      void renderCustomImageCanvas(
+        map,
+        canvas,
+        data,
+        layerVisibilityRef.current.images,
+        customImageCacheRef.current,
+        () => drawId === imageDrawRef.current
+      ).catch((error) => console.error("Custom hex image draw failed", error));
+    }
+
+    async function loadCustomImages() {
       const requestId = ++imageRequestRef.current;
       if (!layerVisibilityRef.current.images) {
-        clearCustomImageTiles(customImageTilesRef.current);
+        customImageDataRef.current = { type: "FeatureCollection", features: [] };
+        clearCustomImageCanvas(customImageCanvasRef.current);
         return;
       }
 
       try {
         const data = await customImageCollectionForMap(map);
         if (requestId !== imageRequestRef.current) return;
-        renderCustomImageTiles(map, customImageTilesRef.current, data, layerVisibilityRef.current.images, setSelectedHex);
+        customImageDataRef.current = data;
+        drawCustomImages(data);
       } catch (error) {
         console.error("Custom hex image refresh failed", error);
-        clearCustomImageTiles(customImageTilesRef.current);
+        clearCustomImageCanvas(customImageCanvasRef.current);
       }
     }
 
@@ -548,7 +599,7 @@ export function EarthMap() {
       applyLayerVisibility(map, layerVisibilityRef.current);
 
       void loadHexes();
-      void loadCustomImageTiles();
+      void loadCustomImages();
 
       const requestedHex = new URLSearchParams(window.location.search).get("hex");
       if (requestedHex && isValidCell(requestedHex)) {
@@ -572,14 +623,26 @@ export function EarthMap() {
       }
     });
 
-    map.on("moveend", () => {
-      void loadHexes();
-      void loadCustomImageTiles();
-    });
+    let moveEndTimer: number | null = null;
+    const loadAfterMove = () => {
+      if (moveEndTimer !== null) window.clearTimeout(moveEndTimer);
+      moveEndTimer = window.setTimeout(() => {
+        void loadHexes();
+        void loadCustomImages();
+      }, 180);
+    };
+    map.on("moveend", loadAfterMove);
 
-    map.on("zoom", () => {
-      for (const tile of customImageTilesRef.current) resizeCustomImageTile(map, tile);
-    });
+    let imageFrame: number | null = null;
+    const scheduleImageDraw = () => {
+      if (imageFrame !== null) return;
+      imageFrame = window.requestAnimationFrame(() => {
+        imageFrame = null;
+        drawCustomImages();
+      });
+    };
+    map.on("move", scheduleImageDraw);
+    map.on("resize", scheduleImageDraw);
 
     let hoveredFeatureId: string | number | null = null;
 
@@ -633,7 +696,10 @@ export function EarthMap() {
     });
 
     return () => {
-      clearCustomImageTiles(customImageTilesRef.current);
+      if (imageFrame !== null) window.cancelAnimationFrame(imageFrame);
+      if (moveEndTimer !== null) window.clearTimeout(moveEndTimer);
+      imageDrawRef.current += 1;
+      clearCustomImageCanvas(customImageCanvasRef.current);
       searchMarkerRef.current?.remove();
       map.remove();
       mapRef.current = null;
@@ -673,7 +739,8 @@ export function EarthMap() {
     if (!map?.getSource(sourceId)) return;
     const bounds = map.getBounds();
     const bbox = [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()].join(",");
-    fetch(`/api/hexes?bbox=${bbox}&zoom=${Math.round(map.getZoom())}&includeVirtual=1&take=10000`)
+    const take = window.innerWidth < 768 ? 4000 : 10000;
+    fetch(`/api/hexes?bbox=${bbox}&zoom=${Math.round(map.getZoom())}&includeVirtual=1&take=${take}`)
       .then((response) => response.json())
       .then((data) => {
         if (!validateGeoJsonResponse(data)) return;
@@ -689,11 +756,15 @@ export function EarthMap() {
       void customImageCollectionForMap(map)
         .then((data) => {
           if (requestId !== imageRequestRef.current) return;
-          renderCustomImageTiles(map, customImageTilesRef.current, data, true, setSelectedHex);
+          customImageDataRef.current = data;
+          const canvas = customImageCanvasRef.current;
+          if (!canvas) return;
+          const drawId = ++imageDrawRef.current;
+          return renderCustomImageCanvas(map, canvas, data, true, customImageCacheRef.current, () => drawId === imageDrawRef.current);
         })
         .catch((error) => console.error("Custom hex image refresh failed", error));
     } else {
-      clearCustomImageTiles(customImageTilesRef.current);
+      clearCustomImageCanvas(customImageCanvasRef.current);
     }
   }, [currentUserId, refreshToken]);
 
@@ -703,14 +774,19 @@ export function EarthMap() {
     if (map?.isStyleLoaded()) applyLayerVisibility(map, layerVisibility);
     if (!map) return;
     if (!layerVisibility.images) {
-      clearCustomImageTiles(customImageTilesRef.current);
+      imageDrawRef.current += 1;
+      clearCustomImageCanvas(customImageCanvasRef.current);
       return;
     }
     const requestId = ++imageRequestRef.current;
     void customImageCollectionForMap(map)
       .then((data) => {
         if (requestId !== imageRequestRef.current) return;
-        renderCustomImageTiles(map, customImageTilesRef.current, data, true, setSelectedHex);
+        customImageDataRef.current = data;
+        const canvas = customImageCanvasRef.current;
+        if (!canvas) return;
+        const drawId = ++imageDrawRef.current;
+        return renderCustomImageCanvas(map, canvas, data, true, customImageCacheRef.current, () => drawId === imageDrawRef.current);
       })
       .catch((error) => console.error("Custom hex image refresh failed", error));
   }, [layerVisibility, setSelectedHex]);
@@ -749,7 +825,17 @@ export function EarthMap() {
   return (
     <div className="relative h-full min-h-0 w-full overflow-hidden bg-[#071525]" style={{ height: "100%", minHeight: 0, width: "100%" }}>
       <div ref={containerRef} className="h-full min-h-0 w-full" style={{ height: "100%", minHeight: 0, width: "100%" }} />
-      <div className="absolute bottom-4 left-4 z-20 w-48 rounded-md border border-white/15 bg-[#071827]/94 p-2.5 shadow-xl backdrop-blur sm:bottom-auto sm:left-auto sm:right-4 sm:top-4">
+      <canvas ref={customImageCanvasRef} className="pointer-events-none absolute inset-0 z-[5] h-full w-full" aria-hidden="true" />
+      <button
+        type="button"
+        aria-label={layersOpen ? "Close map layers" : "Open map layers"}
+        aria-expanded={layersOpen}
+        className="absolute right-3 top-[4.5rem] z-20 flex h-10 w-10 items-center justify-center rounded-md border border-white/15 bg-[#071827]/94 text-slate-100 shadow-xl backdrop-blur md:hidden"
+        onClick={() => setLayersOpen((open) => !open)}
+      >
+        {layersOpen ? <X className="h-4 w-4" /> : <SlidersHorizontal className="h-4 w-4" />}
+      </button>
+      <div className={`${layersOpen ? "block" : "hidden"} absolute right-3 top-[7.25rem] z-20 w-44 rounded-md border border-white/15 bg-[#071827]/96 p-2.5 shadow-xl backdrop-blur md:right-4 md:top-4 md:block md:w-48`}>
         <div className="mb-1.5 flex items-center gap-2 px-1 text-xs font-semibold uppercase text-slate-300"><Layers3 className="h-3.5 w-3.5" /> Map layers</div>
         {([
           ["images", "User Images"],
