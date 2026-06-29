@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getResolution, isValidCell } from "h3-js";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 
@@ -16,10 +17,11 @@ export async function POST(request: Request) {
   try {
     const formData = await request.formData();
     const hexId = formData.get("hexId");
+    const h3Index = formData.get("h3Index");
     const file = formData.get("file");
 
-    if (typeof hexId !== "string" || !hexId) {
-      return NextResponse.json({ error: "Hex ID is required." }, { status: 400 });
+    if ((typeof hexId !== "string" || !hexId) && (typeof h3Index !== "string" || !h3Index)) {
+      return NextResponse.json({ error: "Hex ID or H3 index is required." }, { status: 400 });
     }
     if (!(file instanceof File)) {
       return NextResponse.json({ error: "Select an image to upload." }, { status: 400 });
@@ -31,13 +33,21 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Image must be smaller than 5MB." }, { status: 413 });
     }
 
-    const hex = await prisma.hex.findUnique({
-      where: { id: hexId },
-      select: { id: true, h3Index: true, ownerId: true }
-    });
-    if (!hex) return NextResponse.json({ error: "Hex not found." }, { status: 404 });
-    if (hex.ownerId !== session.user.id) {
+    const hex = typeof hexId === "string" && hexId
+      ? await prisma.hex.findUnique({ where: { id: hexId }, select: { id: true, h3Index: true, ownerId: true } })
+      : null;
+    if (typeof hexId === "string" && hexId && !hex) return NextResponse.json({ error: "Hex not found." }, { status: 404 });
+    if (hex && hex.ownerId !== session.user.id) {
       return NextResponse.json({ error: "Only the hex owner can change its image." }, { status: 403 });
+    }
+
+    const purchaseH3Index = typeof h3Index === "string" ? h3Index : null;
+    if (!hex && purchaseH3Index) {
+      if (!isValidCell(purchaseH3Index) || getResolution(purchaseH3Index) !== 5) {
+        return NextResponse.json({ error: "A valid resolution-5 H3 index is required." }, { status: 400 });
+      }
+      const existingHex = await prisma.hex.findUnique({ where: { h3Index: purchaseH3Index }, select: { id: true } });
+      if (existingHex) return NextResponse.json({ error: "This hex is already owned." }, { status: 409 });
     }
 
     const token = process.env.BLOB_READ_WRITE_TOKEN;
@@ -46,7 +56,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Image uploads are temporarily unavailable." }, { status: 503 });
     }
 
-    const pathname = `hexes/${hex.h3Index}/${crypto.randomUUID()}-${safeFileName(file.name)}`;
+    const targetH3Index = hex?.h3Index ?? purchaseH3Index!;
+    const pathname = `hexes/${targetH3Index}/${crypto.randomUUID()}-${safeFileName(file.name)}`;
     const uploadResponse = await fetch(`https://blob.vercel-storage.com/?pathname=${encodeURIComponent(pathname)}`, {
       method: "PUT",
       headers: {
@@ -66,12 +77,17 @@ export async function POST(request: Request) {
     }
 
     const blob = (await uploadResponse.json()) as { url?: string };
+    console.info("[hex-image-upload] upload API response", { status: uploadResponse.status, h3Index: targetH3Index, url: blob.url ?? null });
     if (!blob.url) {
       console.error("[hex-image-upload] Vercel Blob returned no public URL.");
       return NextResponse.json({ error: "Image upload returned an invalid response." }, { status: 502 });
     }
 
-    await prisma.hex.update({ where: { id: hex.id }, data: { imageUrl: blob.url } });
+    console.info("[hex-image-upload] blob URL", blob.url);
+    if (hex) {
+      const updatedHex = await prisma.hex.update({ where: { id: hex.id }, data: { imageUrl: blob.url } });
+      console.info("[hex-image-upload] Hex update result", { id: updatedHex.id, h3Index: updatedHex.h3Index, imageUrl: updatedHex.imageUrl });
+    }
     return NextResponse.json({ imageUrl: blob.url });
   } catch (error) {
     console.error("[hex-image-upload] Upload failed", error);

@@ -13,7 +13,6 @@ import { money } from "@/lib/utils";
 import { DEMO_USER, isClientDemoMode } from "@/lib/demo";
 import { buyDemoHex, getDemoOwnedHexes, updateDemoHexMetadata } from "@/lib/demo-storage";
 import { redirectToSignIn } from "@/lib/client-auth";
-import { getPendingHexImage, removePendingHexImage, savePendingHexImage } from "@/lib/pending-hex-image";
 import { useMapStore } from "@/stores/map-store";
 
 type Certificate = {
@@ -129,20 +128,6 @@ export function PurchasePanel() {
     };
   }, [purchaseImagePreview]);
 
-  async function attachPendingImage(nextCertificate: Certificate) {
-    const pendingImage = await getPendingHexImage(nextCertificate.h3Index);
-    if (!pendingImage) return nextCertificate;
-    setCheckoutStatus("Uploading your image...");
-    const formData = new FormData();
-    formData.set("hexId", nextCertificate.id);
-    formData.set("file", pendingImage);
-    const response = await fetch("/api/upload/hex-image", { method: "POST", body: formData });
-    const data = (await response.json()) as { imageUrl?: string; error?: string };
-    if (!response.ok || !data.imageUrl) throw new Error(data.error ?? "Your purchase succeeded, but the image could not be uploaded.");
-    await removePendingHexImage(nextCertificate.h3Index);
-    return { ...nextCertificate, imageUrl: data.imageUrl };
-  }
-
   useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
@@ -163,13 +148,7 @@ export function PurchasePanel() {
 
         if (cancelled) return;
         if (data.status === "SUCCEEDED" && data.certificate) {
-          let confirmedCertificate = data.certificate;
-          try {
-            confirmedCertificate = await attachPendingImage(confirmedCertificate);
-          } catch (uploadError) {
-            setError(uploadError instanceof Error ? uploadError.message : "Your purchase succeeded, but the image could not be uploaded.");
-          }
-          if (cancelled) return;
+          const confirmedCertificate = data.certificate;
           setCertificate(confirmedCertificate);
           setSelectedHex({
             h3Index: confirmedCertificate.h3Index,
@@ -293,12 +272,21 @@ export function PurchasePanel() {
       return;
     }
 
+    let checkoutImageUrl = imageUrl || undefined;
     if (purchaseImage) {
+      const formData = new FormData();
+      formData.set("h3Index", selectedHex.h3Index);
+      formData.set("file", purchaseImage);
       try {
-        await savePendingHexImage(selectedHex.h3Index, purchaseImage);
-      } catch {
+        const uploadResponse = await fetch("/api/upload/hex-image", { method: "POST", body: formData });
+        const uploadData = (await uploadResponse.json()) as { imageUrl?: string; error?: string };
+        console.info("[purchase-image] upload API response", uploadResponse.status, uploadData);
+        if (!uploadResponse.ok || !uploadData.imageUrl) throw new Error(uploadData.error ?? "Image could not be uploaded.");
+        checkoutImageUrl = uploadData.imageUrl;
+        console.info("[purchase-image] blob URL", checkoutImageUrl);
+      } catch (uploadError) {
         setBusy(false);
-        setError("The selected image could not be prepared for checkout.");
+        setError(uploadError instanceof Error ? uploadError.message : "Image could not be uploaded before checkout.");
         return;
       }
     }
@@ -311,7 +299,7 @@ export function PurchasePanel() {
         title,
         message,
         avatarUrl: avatarUrl || undefined,
-        imageUrl: imageUrl || undefined,
+        imageUrl: checkoutImageUrl,
         externalLink: externalLink || undefined
       })
     });
@@ -392,6 +380,7 @@ export function PurchasePanel() {
     setPurchaseImagePreview(null);
     setError(null);
     if (!file) return;
+    console.info("[purchase-image] selected file", file.name);
     if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
       setError("Use a JPEG, PNG, or WebP image.");
       return;
@@ -541,7 +530,7 @@ export function PurchasePanel() {
                 <div className="space-y-3 rounded-md border border-border bg-background p-3">
                   <div>
                     <p className="text-sm font-medium">Add an image from your device</p>
-                    <p className="text-xs text-muted-foreground">It will upload automatically after your purchase is confirmed.</p>
+                    <p className="text-xs text-muted-foreground">It uploads securely before checkout and is attached after payment.</p>
                   </div>
                   <input ref={purchaseImageInputRef} type="file" accept="image/*" className="sr-only" onChange={(event) => choosePurchaseImage(event.target.files?.[0])} />
                   <Button type="button" variant="outline" className="h-11 w-full" disabled={busy || isClientDemoMode} onClick={() => purchaseImageInputRef.current?.click()}>

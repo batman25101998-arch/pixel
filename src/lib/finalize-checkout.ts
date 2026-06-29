@@ -45,7 +45,17 @@ export async function finalizeCheckoutSession(
     });
     if (claim.count !== 1) return "IN_PROGRESS";
 
-    const metadata = payment.metadata as PaymentMetadata;
+    const paymentMetadata = payment.metadata as PaymentMetadata;
+    const metadata: PaymentMetadata = {
+      ...paymentMetadata,
+      h3Index: paymentMetadata.h3Index ?? checkout.metadata?.h3Index,
+      imageUrl: paymentMetadata.imageUrl ?? checkout.metadata?.imageUrl
+    };
+    console.info("[checkout-finalize] metadata", {
+      paymentId: payment.id,
+      h3Index: metadata.h3Index ?? null,
+      imageUrl: metadata.imageUrl ?? null
+    });
     if (!metadata.h3Index) {
       await tx.payment.update({ where: { id: payment.id }, data: { status: "CANCELED" } });
       return "CANCELED";
@@ -83,6 +93,11 @@ export async function finalizeCheckoutSession(
             priceCents: 100
           }
         });
+    console.info("[checkout-finalize] Hex update result", {
+      id: hex.id,
+      h3Index: hex.h3Index,
+      imageUrl: hex.imageUrl
+    });
 
     await tx.payment.update({
       where: { id: payment.id },

@@ -20,21 +20,30 @@ export async function POST(request: Request) {
   const existing = await prisma.hex.findUnique({ where: { h3Index }, select: { id: true } });
   if (existing) return NextResponse.json({ error: "This hex is already owned." }, { status: 409 });
 
+  const paymentMetadata: Record<string, string> = {
+    h3Index,
+    title: parsed.data.title,
+    message: parsed.data.message
+  };
+  if (parsed.data.avatarUrl) paymentMetadata.avatarUrl = parsed.data.avatarUrl;
+  if (parsed.data.imageUrl) paymentMetadata.imageUrl = parsed.data.imageUrl;
+  if (parsed.data.externalLink) paymentMetadata.externalLink = parsed.data.externalLink;
+
   const payment = await prisma.payment.create({
     data: {
       userId: session.user.id,
       amountCents: 100,
       status: "REQUIRES_PAYMENT",
-      metadata: {
-        h3Index,
-        title: parsed.data.title,
-        message: parsed.data.message,
-        avatarUrl: parsed.data.avatarUrl,
-        imageUrl: parsed.data.imageUrl,
-        externalLink: parsed.data.externalLink
-      }
+      metadata: paymentMetadata
     }
   });
+  const checkoutMetadata: Record<string, string> = {
+    paymentId: payment.id,
+    h3Index
+  };
+  if (parsed.data.imageUrl) checkoutMetadata.imageUrl = parsed.data.imageUrl;
+  console.info("[checkout] metadata", checkoutMetadata);
+
   const checkout = await stripe.checkout.sessions.create({
     mode: "payment",
     client_reference_id: payment.id,
@@ -42,7 +51,7 @@ export async function POST(request: Request) {
     success_url: `${env.NEXT_PUBLIC_APP_URL}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${env.NEXT_PUBLIC_APP_URL}/checkout/cancel?hex=${encodeURIComponent(h3Index)}`,
     line_items: [{ quantity: 1, price_data: { currency: "usd", unit_amount: 100, product_data: { name: "Own a Piece of Earth", description: h3Index } } }],
-    metadata: { paymentId: payment.id, h3Index }
+    metadata: checkoutMetadata
   });
   await prisma.payment.update({ where: { id: payment.id }, data: { providerCheckoutId: checkout.id } });
   return NextResponse.json({ checkoutUrl: checkout.url });
