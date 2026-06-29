@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
 import { getResolution, isValidCell } from "h3-js";
+import { put } from "@vercel/blob";
 import { auth } from "@/auth";
 import { getBlobReadWriteToken } from "@/lib/blob";
 import { prisma } from "@/lib/prisma";
 
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+
+export const runtime = "nodejs";
 
 function safeFileName(name: string) {
   return name.replace(/[^a-zA-Z0-9._-]/g, "-").replace(/-+/g, "-").slice(-100) || "hex-image";
@@ -52,6 +55,11 @@ export async function POST(request: Request) {
     }
 
     const token = getBlobReadWriteToken();
+    console.info("[hex-image-upload] Blob configuration", {
+      tokenExists: Boolean(token),
+      tokenLength: token?.length ?? 0,
+      environment: process.env.VERCEL_ENV ?? process.env.NODE_ENV ?? "unknown"
+    });
     if (!token) {
       console.error("[hex-image-upload] BLOB_READ_WRITE_TOKEN is not configured.");
       return NextResponse.json(
@@ -62,30 +70,19 @@ export async function POST(request: Request) {
 
     const targetH3Index = hex?.h3Index ?? purchaseH3Index!;
     const pathname = `hexes/${targetH3Index}/${crypto.randomUUID()}-${safeFileName(file.name)}`;
-    const uploadResponse = await fetch(`https://blob.vercel-storage.com/?pathname=${encodeURIComponent(pathname)}`, {
-      method: "PUT",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": file.type,
-        "x-api-version": "12",
-        "x-content-length": String(file.size),
-        "x-content-type": file.type,
-        "x-vercel-blob-access": "public"
-      },
-      body: file
+    console.info("[hex-image-upload] Calling Vercel Blob put()", {
+      pathname,
+      contentType: file.type,
+      size: file.size
     });
-
-    if (!uploadResponse.ok) {
-      console.error("[hex-image-upload] Vercel Blob rejected upload", uploadResponse.status, await uploadResponse.text());
-      return NextResponse.json({ error: "Image could not be uploaded." }, { status: 502 });
-    }
-
-    const blob = (await uploadResponse.json()) as { url?: string };
-    console.info("[hex-image-upload] upload API response", { status: uploadResponse.status, h3Index: targetH3Index, url: blob.url ?? null });
-    if (!blob.url) {
-      console.error("[hex-image-upload] Vercel Blob returned no public URL.");
-      return NextResponse.json({ error: "Image upload returned an invalid response." }, { status: 502 });
-    }
+    const blob = await put(pathname, file, {
+      access: "public",
+      addRandomSuffix: false,
+      contentType: file.type,
+      maximumSizeInBytes: MAX_IMAGE_SIZE,
+      token
+    });
+    console.info("[hex-image-upload] Vercel Blob response", blob);
 
     console.info("[hex-image-upload] blob URL", blob.url);
     if (hex) {
@@ -94,8 +91,9 @@ export async function POST(request: Request) {
     }
     return NextResponse.json({ imageUrl: blob.url });
   } catch (error) {
-    console.error("[hex-image-upload] Upload failed", error);
-    return NextResponse.json({ error: "Image upload failed." }, { status: 500 });
+    console.error("[hex-image-upload] Vercel Blob upload failed", error);
+    const message = error instanceof Error ? error.message : "Unknown Vercel Blob error.";
+    return NextResponse.json({ error: `Image upload failed: ${message}` }, { status: 502 });
   }
 }
 
