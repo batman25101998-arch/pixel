@@ -20,6 +20,25 @@ export function HexImageUpload({ hexId, imageUrl, disabled = false, onImageChang
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState<"upload" | "remove" | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [blobAvailable, setBlobAvailable] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function checkAvailability() {
+      try {
+        const response = await fetch("/api/upload/status", { cache: "no-store" });
+        if (!response.ok || !response.headers.get("content-type")?.includes("application/json")) return;
+        const data = (await response.json()) as { available?: boolean };
+        if (!cancelled && typeof data.available === "boolean") setBlobAvailable(data.available);
+      } catch {
+        // The upload request remains authoritative when this optional check is unavailable.
+      }
+    }
+    void checkAvailability();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -95,10 +114,10 @@ export function HexImageUpload({ hexId, imageUrl, disabled = false, onImageChang
       <input ref={inputRef} type="file" accept="image/*" className="sr-only" onChange={(event) => selectFile(event.target.files?.[0])} />
       {previewUrl || imageUrl ? <img src={previewUrl ?? imageUrl ?? ""} alt="Hex image preview" className="aspect-video w-full rounded-md object-cover" /> : null}
       <div className="grid gap-2 sm:grid-cols-2">
-        <Button type="button" variant="outline" className="h-11 w-full" disabled={disabled || busy !== null} onClick={() => inputRef.current?.click()}>
+        <Button type="button" variant="outline" className="h-11 w-full" disabled={disabled || blobAvailable === false || busy !== null} onClick={() => inputRef.current?.click()}>
           <ImageUp className="h-4 w-4" /> Choose image
         </Button>
-        <Button type="button" className="h-11 w-full" disabled={disabled || !file || busy !== null} onClick={upload}>
+        <Button type="button" className="h-11 w-full" disabled={disabled || blobAvailable === false || !file || busy !== null} onClick={upload}>
           {busy === "upload" ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImageUp className="h-4 w-4" />}
           {busy === "upload" ? "Uploading..." : "Upload image"}
         </Button>
@@ -110,6 +129,7 @@ export function HexImageUpload({ hexId, imageUrl, disabled = false, onImageChang
         </Button>
       ) : null}
       {disabled ? <p className="text-xs text-muted-foreground">Direct uploads require production storage. Image URLs still work in demo mode.</p> : null}
+      {!disabled && blobAvailable === false ? <p className="text-xs text-destructive">Image uploads are unavailable because Blob storage is not configured.</p> : null}
       {message ? <p className="text-xs text-muted-foreground" aria-live="polite">{message}</p> : null}
     </div>
   );

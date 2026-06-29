@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getResolution, isValidCell } from "h3-js";
 import { auth } from "@/auth";
+import { getBlobReadWriteToken } from "@/lib/blob";
 import { prisma } from "@/lib/prisma";
 
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
@@ -50,10 +51,13 @@ export async function POST(request: Request) {
       if (existingHex) return NextResponse.json({ error: "This hex is already owned." }, { status: 409 });
     }
 
-    const token = process.env.BLOB_READ_WRITE_TOKEN;
+    const token = getBlobReadWriteToken();
     if (!token) {
       console.error("[hex-image-upload] BLOB_READ_WRITE_TOKEN is not configured.");
-      return NextResponse.json({ error: "Image uploads are temporarily unavailable." }, { status: 503 });
+      return NextResponse.json(
+        { error: "Image uploads are unavailable because BLOB_READ_WRITE_TOKEN is missing." },
+        { status: 503 }
+      );
     }
 
     const targetH3Index = hex?.h3Index ?? purchaseH3Index!;
