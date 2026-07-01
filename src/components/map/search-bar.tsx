@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { isValidCell } from "h3-js";
 import { Loader2, MapPin, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -51,6 +51,16 @@ export function SearchBar() {
   const [loading, setLoading] = useState(false);
   const setSelectedHex = useMapStore((state) => state.setSelectedHex);
   const focusMap = useMapStore((state) => state.focusMap);
+
+  useEffect(() => {
+    const closeSuggestions = () => {
+      setResults([]);
+      setError(null);
+      setActiveLabel(null);
+    };
+    window.addEventListener("pixel-earth:claim-first-hex", closeSuggestions);
+    return () => window.removeEventListener("pixel-earth:claim-first-hex", closeSuggestions);
+  }, []);
 
   function selectResult(result: SearchResult) {
     const properties = result.properties;
@@ -129,7 +139,7 @@ export function SearchBar() {
 
   return (
     <div className="absolute left-3 right-3 top-3 z-20 md:left-4 md:right-auto md:top-4 md:w-[min(500px,calc(100vw-2rem))]">
-      <form onSubmit={submit} className="flex flex-wrap gap-2 rounded-lg border border-border bg-card/95 p-2 shadow-xl backdrop-blur">
+      <form onSubmit={submit} className="flex flex-wrap gap-2 rounded-lg border border-border bg-[#0b1117] p-2 shadow-xl">
         <Input id="map-search-input" className="min-w-0 flex-1 text-base md:text-sm" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search a place or hex" aria-label="Search the world map" />
         <Button type="submit" size="icon" aria-label="Search" disabled={loading}>
           {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
@@ -139,7 +149,7 @@ export function SearchBar() {
       </form>
 
       {results.length ? (
-        <div className="mt-2 overflow-hidden rounded-lg border border-border bg-card/98 shadow-2xl backdrop-blur">
+        <div className="mt-2 overflow-hidden rounded-lg border border-border bg-[#0b1117] shadow-2xl">
           {results.map((result, index) => (
             <button
               key={`${result.type}-${result.label}-${index}`}

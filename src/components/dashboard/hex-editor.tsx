@@ -1,7 +1,8 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { Edit3, Loader2, Save, X } from "lucide-react";
+import Link from "next/link";
+import { Edit3, Eye, Loader2, Save, X } from "lucide-react";
 import { HexImageUpload } from "@/components/hex-image-upload";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,15 +54,24 @@ export function HexEditor({ hex }: { hex: Hex }) {
 
   return (
     <article className="overflow-hidden rounded-lg border border-border bg-card">
-      <div className="flex items-center justify-between gap-3 p-4">
-        <div className="min-w-0">
-          <h3 className="truncate font-semibold">{hex.title || hex.h3Index}</h3>
-          <p className="mt-0.5 truncate text-xs text-muted-foreground">{hex.h3Index}</p>
+      <div className="grid gap-4 p-4 sm:grid-cols-[112px_1fr_auto] sm:items-center">
+        <div className="aspect-video overflow-hidden rounded-md border border-border bg-[#0b1117] sm:aspect-square">
+          {imageUrl ? <img src={imageUrl} alt="" className="h-full w-full object-cover" /> : <div className="h-full w-full bg-[#101820]" />}
         </div>
-        <Button type="button" variant={editing ? "outline" : "default"} size="sm" onClick={() => setEditing((open) => !open)}>
-          {editing ? <X className="h-4 w-4" /> : <Edit3 className="h-4 w-4" />}
-          {editing ? "Close" : "Edit"}
-        </Button>
+        <div className="min-w-0 space-y-1">
+          <h3 className="truncate font-semibold">{hex.title || "Untitled hex"}</h3>
+          <p className="truncate text-xs text-muted-foreground">{hex.h3Index}</p>
+          {hex.message ? <p className="line-clamp-2 text-sm text-muted-foreground">{hex.message}</p> : <p className="text-sm text-muted-foreground">No message yet.</p>}
+        </div>
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-col">
+          <Button type="button" variant={editing ? "outline" : "default"} size="sm" onClick={() => setEditing((open) => !open)}>
+            {editing ? <X className="h-4 w-4" /> : <Edit3 className="h-4 w-4" />}
+            {editing ? "Close" : "Edit"}
+          </Button>
+          <Button asChild type="button" variant="outline" size="sm">
+            <Link href={`/?hex=${encodeURIComponent(hex.h3Index)}`}><Eye className="h-4 w-4" /> View on Map</Link>
+          </Button>
+        </div>
       </div>
 
       {editing ? (

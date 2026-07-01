@@ -49,6 +49,7 @@ export function CheckoutSuccess({ sessionId }: { sessionId: string }) {
 
   const completed = result.status === "SUCCEEDED" && result.certificate;
   const failed = ["FAILED", "CANCELED", "REFUNDED"].includes(result.status);
+  const progressText = result.status === "PROCESSING" ? "Saving forever..." : "Creating your hex...";
   const mapHref = result.certificate?.h3Index
     ? `/?hex=${encodeURIComponent(result.certificate.h3Index)}`
     : "/";
@@ -80,7 +81,7 @@ export function CheckoutSuccess({ sessionId }: { sessionId: string }) {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           {completed ? <CheckCircle2 className="h-6 w-6 text-emerald-400" /> : <Loader2 className="h-6 w-6 animate-spin text-primary" />}
-          {completed ? "Purchase confirmed" : failed ? "Payment not completed" : "Confirming your purchase"}
+          {completed ? "Purchase confirmed" : failed ? "Payment not completed" : progressText}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-5">
@@ -89,7 +90,9 @@ export function CheckoutSuccess({ sessionId }: { sessionId: string }) {
             ? "Stripe confirmed the $1 payment and ownership has been saved."
             : failed
               ? "No ownership change was made. You can return to the map and try again."
-              : "Stripe has returned successfully. We are waiting for the secure webhook confirmation."}
+              : result.status === "PROCESSING"
+                ? "Your payment is confirmed. We are saving permanent ownership now."
+                : "Your payment returned successfully. We are creating your permanent hex."}
         </p>
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
         {completed ? (

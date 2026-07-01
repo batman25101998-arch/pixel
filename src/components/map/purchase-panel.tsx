@@ -84,6 +84,7 @@ export function PurchasePanel() {
   const [imageUrl, setImageUrl] = useState("");
   const [externalLink, setExternalLink] = useState("");
   const [busy, setBusy] = useState(false);
+  const [purchaseStep, setPurchaseStep] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [certificate, setCertificate] = useState<Certificate | null>(null);
   const [checkoutStatus, setCheckoutStatus] = useState<string | null>(null);
@@ -111,6 +112,7 @@ export function PurchasePanel() {
   useEffect(() => {
     if (!selectedHex) return;
     setError(null);
+    setPurchaseStep(null);
     setPurchaseImage(null);
     setPurchaseImagePreview(null);
     if (purchaseImageInputRef.current) purchaseImageInputRef.current.value = "";
@@ -141,7 +143,7 @@ export function PurchasePanel() {
 
     async function pollCheckout() {
       attempts += 1;
-      setCheckoutStatus("Confirming payment...");
+      setCheckoutStatus("Saving forever...");
       try {
         const response = await fetch(`/api/checkout/status?sessionId=${encodeURIComponent(checkoutSessionId)}`);
         const data = (await response.json()) as CheckoutStatusResponse;
@@ -170,6 +172,7 @@ export function PurchasePanel() {
           });
           refresh();
           setCheckoutStatus("Payment complete");
+          setPurchaseStep(null);
           window.history.replaceState(null, "", window.location.pathname);
           return;
         }
@@ -205,6 +208,7 @@ export function PurchasePanel() {
     if (!selectedHex) return;
     setBusy(true);
     setError(null);
+    setPurchaseStep(purchaseImage ? "Uploading image..." : "Creating your hex...");
 
     if (!isClientDemoMode && authenticationStatus !== "authenticated") {
       const callbackUrl = new URL(window.location.href);
@@ -218,11 +222,13 @@ export function PurchasePanel() {
       const existingOwned = getDemoOwnedHexes();
       if (existingOwned.some((hex) => hex.h3Index === selectedHex.h3Index)) {
         setBusy(false);
+        setPurchaseStep(null);
         setError("You already own this demo hex.");
         return;
       }
 
       const id = `demo-${selectedHex.h3Index}`;
+      setPurchaseStep("Creating your hex...");
       buyDemoHex({
         h3Index: selectedHex.h3Index,
         latitude: selectedHex.lat,
@@ -268,6 +274,7 @@ export function PurchasePanel() {
         }
       });
       setBusy(false);
+      setPurchaseStep(null);
       refresh();
       return;
     }
@@ -284,8 +291,10 @@ export function PurchasePanel() {
         if (!uploadResponse.ok || !uploadData.imageUrl) throw new Error(uploadData.error ?? "Image could not be uploaded.");
         checkoutImageUrl = uploadData.imageUrl;
         console.info("[purchase-image] blob URL", checkoutImageUrl);
+        setPurchaseStep("Creating your hex...");
       } catch (uploadError) {
         setBusy(false);
+        setPurchaseStep(null);
         setError(uploadError instanceof Error ? uploadError.message : "Image could not be uploaded before checkout.");
         return;
       }
@@ -304,11 +313,14 @@ export function PurchasePanel() {
       })
     });
     const data = await response.json();
-    setBusy(false);
     if (!response.ok) {
+      setBusy(false);
+      setPurchaseStep(null);
       setError(typeof data.error === "string" ? data.error : "Checkout could not be started.");
       return;
     }
+    setPurchaseStep("Saving forever...");
+    await new Promise((resolve) => window.setTimeout(resolve, 150));
     window.location.href = data.checkoutUrl;
   }
 
@@ -397,6 +409,7 @@ export function PurchasePanel() {
     setSelectedHex(null);
     setCertificate(null);
     setCheckoutStatus(null);
+    setPurchaseStep(null);
     setError(null);
   }
 
@@ -430,7 +443,7 @@ export function PurchasePanel() {
         </div>
 
         {checkoutStatus && !certificate ? (
-          <div className="mb-4 flex items-center gap-3 rounded-md border border-cyan-200/20 bg-background/70 p-3 text-sm">
+          <div className="mb-4 flex items-center gap-3 rounded-md border border-cyan-200/20 bg-[#101820] p-3 text-sm">
             <Loader2 className="h-4 w-4 animate-spin text-primary" />
             <span>{checkoutStatus}</span>
           </div>
@@ -551,7 +564,7 @@ export function PurchasePanel() {
               <div className="sticky bottom-[-1.25rem] z-10 -mx-5 -mb-5 border-t border-border bg-[#0b1117] p-4 pb-[max(1rem,env(safe-area-inset-bottom))] md:static md:m-0 md:border-0 md:bg-transparent md:p-0">
                 <Button className="h-12 w-full md:h-10" onClick={checkout} disabled={busy}>
                   {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShoppingCart className="h-4 w-4" />}
-                  {busy ? "Starting checkout..." : "Buy hex for $1"}
+                  {busy ? purchaseStep ?? "Creating your hex..." : "Buy hex for $1"}
                 </Button>
               </div>
             )}

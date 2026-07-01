@@ -470,6 +470,19 @@ export function EarthMap() {
     map.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-left");
     map.resize();
 
+    const focusForFirstPurchase = () => {
+      setSelectedHex(null);
+      map.resize();
+      map.easeTo({
+        center: map.getCenter(),
+        zoom: Math.max(map.getZoom(), 3.5),
+        duration: 900,
+        essential: true
+      });
+      map.getCanvas().focus({ preventScroll: true });
+    };
+    window.addEventListener("pixel-earth:claim-first-hex", focusForFirstPurchase);
+
     function tintBaseMap() {
       if (!map.isStyleLoaded() || map.getLayer("pixel-world-ocean")) return;
       map.addLayer(
@@ -712,6 +725,7 @@ export function EarthMap() {
       if (moveEndTimer !== null) window.clearTimeout(moveEndTimer);
       imageDrawRef.current += 1;
       clearCustomImageCanvas(customImageCanvasRef.current);
+      window.removeEventListener("pixel-earth:claim-first-hex", focusForFirstPurchase);
       searchMarkerRef.current?.remove();
       map.remove();
       mapRef.current = null;
@@ -842,12 +856,12 @@ export function EarthMap() {
         type="button"
         aria-label={layersOpen ? "Close map layers" : "Open map layers"}
         aria-expanded={layersOpen}
-        className="absolute right-3 top-[4.5rem] z-20 flex h-10 w-10 items-center justify-center rounded-md border border-white/15 bg-[#071827]/94 text-slate-100 shadow-xl backdrop-blur md:hidden"
+        className="absolute right-3 top-[4.5rem] z-20 flex h-10 w-10 items-center justify-center rounded-md border border-white/15 bg-[#071827] text-slate-100 shadow-xl md:hidden"
         onClick={() => setLayersOpen((open) => !open)}
       >
         {layersOpen ? <X className="h-4 w-4" /> : <SlidersHorizontal className="h-4 w-4" />}
       </button>
-      <div className={`${layersOpen ? "block" : "hidden"} absolute right-3 top-[7.25rem] z-20 w-44 rounded-md border border-white/15 bg-[#071827]/96 p-2.5 shadow-xl backdrop-blur md:right-4 md:top-4 md:block md:w-48`}>
+      <div className={`${layersOpen ? "block" : "hidden"} absolute right-3 top-[7.25rem] z-20 w-44 rounded-md border border-white/15 bg-[#071827] p-2.5 shadow-xl md:right-4 md:top-4 md:block md:w-48`}>
         <div className="mb-1.5 flex items-center gap-2 px-1 text-xs font-semibold uppercase text-slate-300"><Layers3 className="h-3.5 w-3.5" /> Map layers</div>
         {([
           ["images", "User Images"],

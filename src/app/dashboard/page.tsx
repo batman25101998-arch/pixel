@@ -27,7 +27,7 @@ export default async function DashboardPage() {
       <div className="space-y-5">
         <Card><CardHeader><CardTitle>{user.ownedHexes.length} owned hexes</CardTitle></CardHeader><CardContent className="text-sm text-muted-foreground">Every purchased hex is yours permanently. Customize each one below.</CardContent></Card>
         <section className="space-y-4">
-          <h2 className="text-xl font-semibold">Your collectible hexes</h2>
+          <h2 className="text-xl font-semibold">My Hexes</h2>
           {user.ownedHexes.length ? user.ownedHexes.map((hex) => <HexEditor key={hex.id} hex={hex} />) : <Card><CardContent className="pt-5 text-sm text-muted-foreground">You have not purchased a hex yet.</CardContent></Card>}
         </section>
       </div>
