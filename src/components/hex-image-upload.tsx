@@ -21,6 +21,7 @@ export function HexImageUpload({ hexId, imageUrl, disabled = false, onImageChang
   const [busy, setBusy] = useState<"upload" | "remove" | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [blobAvailable, setBlobAvailable] = useState<boolean | null>(null);
+  const [blobUnavailableReason, setBlobUnavailableReason] = useState<"missing" | "placeholder" | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -28,8 +29,11 @@ export function HexImageUpload({ hexId, imageUrl, disabled = false, onImageChang
       try {
         const response = await fetch("/api/upload/status", { cache: "no-store" });
         if (!response.ok || !response.headers.get("content-type")?.includes("application/json")) return;
-        const data = (await response.json()) as { available?: boolean };
-        if (!cancelled && typeof data.available === "boolean") setBlobAvailable(data.available);
+        const data = (await response.json()) as { available?: boolean; reason?: "configured" | "missing" | "placeholder" };
+        if (!cancelled && typeof data.available === "boolean") {
+          setBlobAvailable(data.available);
+          setBlobUnavailableReason(data.reason === "missing" || data.reason === "placeholder" ? data.reason : null);
+        }
       } catch {
         // The upload request remains authoritative when this optional check is unavailable.
       }
@@ -129,7 +133,13 @@ export function HexImageUpload({ hexId, imageUrl, disabled = false, onImageChang
         </Button>
       ) : null}
       {disabled ? <p className="text-xs text-muted-foreground">Direct uploads require production storage. Image URLs still work in demo mode.</p> : null}
-      {!disabled && blobAvailable === false ? <p className="text-xs text-destructive">Image uploads are unavailable because Blob storage is not configured.</p> : null}
+      {!disabled && blobAvailable === false ? (
+        <p className="text-xs text-destructive">
+          {blobUnavailableReason === "placeholder"
+            ? "Image uploads are unavailable because the local Blob token is still a placeholder."
+            : "Image uploads are unavailable because BLOB_READ_WRITE_TOKEN is missing locally."}
+        </p>
+      ) : null}
       {message ? <p className="text-xs text-muted-foreground" aria-live="polite">{message}</p> : null}
     </div>
   );

@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
-import { isBlobUploadConfigured } from "@/lib/blob";
+import { getBlobTokenStatus } from "@/lib/blob";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  const status = getBlobTokenStatus();
   return NextResponse.json(
-    { available: isBlobUploadConfigured() },
+    { available: status.reason === "configured", reason: status.reason },
     { headers: { "Cache-Control": "no-store" } }
   );
 }

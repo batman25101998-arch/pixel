@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getResolution, isValidCell } from "h3-js";
 import { put } from "@vercel/blob";
 import { auth } from "@/auth";
-import { getBlobReadWriteToken } from "@/lib/blob";
+import { getBlobTokenStatus } from "@/lib/blob";
 import { prisma } from "@/lib/prisma";
 
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
@@ -54,16 +54,21 @@ export async function POST(request: Request) {
       if (existingHex) return NextResponse.json({ error: "This hex is already owned." }, { status: 409 });
     }
 
-    const token = getBlobReadWriteToken();
-    console.info("[hex-image-upload] Blob configuration", {
-      tokenExists: Boolean(token),
-      tokenLength: token?.length ?? 0,
-      environment: process.env.VERCEL_ENV ?? process.env.NODE_ENV ?? "unknown"
-    });
+    const tokenStatus = getBlobTokenStatus();
+    const token = tokenStatus.token;
+    const runtimeEnvironment = process.env.VERCEL === "1"
+      ? `production (${process.env.VERCEL_ENV ?? "vercel"})`
+      : "local development";
+    console.info(`[hex-image-upload] BLOB_READ_WRITE_TOKEN prefix = ${tokenStatus.prefix}`);
+    console.info(`[hex-image-upload] runtime = ${runtimeEnvironment}`);
     if (!token) {
-      console.error("[hex-image-upload] BLOB_READ_WRITE_TOKEN is not configured.");
+      console.error(`[hex-image-upload] Blob token is ${tokenStatus.reason}.`);
       return NextResponse.json(
-        { error: "Image uploads are unavailable because BLOB_READ_WRITE_TOKEN is missing." },
+        {
+          error: tokenStatus.reason === "placeholder"
+            ? "Image uploads are unavailable because BLOB_READ_WRITE_TOKEN is still a placeholder. Add the real store token to .env.local and restart Next.js."
+            : "Image uploads are unavailable because BLOB_READ_WRITE_TOKEN is missing from .env.local."
+        },
         { status: 503 }
       );
     }
