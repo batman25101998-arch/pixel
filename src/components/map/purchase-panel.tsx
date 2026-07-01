@@ -481,6 +481,12 @@ export function PurchasePanel() {
                   <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Owner</p>
                   <p className="mt-1 font-medium">{purchased ? purchased.ownerName : "Available"}</p>
                 </div>
+                {!purchased ? (
+                  <div className="flex items-center justify-between border-t border-border pt-3">
+                    <span className="font-medium text-emerald-300">Available</span>
+                    <span className="font-semibold text-white">Price: $1</span>
+                  </div>
+                ) : null}
               </div>
             </div>
 
@@ -564,7 +570,7 @@ export function PurchasePanel() {
               <div className="sticky bottom-[-1.25rem] z-10 -mx-5 -mb-5 border-t border-border bg-[#0b1117] p-4 pb-[max(1rem,env(safe-area-inset-bottom))] md:static md:m-0 md:border-0 md:bg-transparent md:p-0">
                 <Button className="h-12 w-full md:h-10" onClick={checkout} disabled={busy}>
                   {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShoppingCart className="h-4 w-4" />}
-                  {busy ? purchaseStep ?? "Creating your hex..." : "Buy hex for $1"}
+                  {busy ? purchaseStep ?? "Creating your hex..." : "Buy this Hex - $1"}
                 </Button>
               </div>
             )}

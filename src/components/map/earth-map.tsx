@@ -15,6 +15,9 @@ const fillLayerId = "earth-hexes-fill";
 const outlineLayerId = "earth-hexes-outline";
 const selectedFillLayerId = "earth-hex-selected-fill";
 const selectedLineLayerId = "earth-hex-selected-line";
+const dashboardFocusSourceId = "earth-hex-dashboard-focus";
+const dashboardFocusFillLayerId = "earth-hex-dashboard-focus-fill";
+const dashboardFocusLineLayerId = "earth-hex-dashboard-focus-line";
 type LayerVisibility = {
   images: boolean;
   hexGrid: boolean;
@@ -336,6 +339,16 @@ function clearCustomImageCanvas(canvas: HTMLCanvasElement | null) {
   if (canvas && context) context.clearRect(0, 0, canvas.width, canvas.height);
 }
 
+function polygonFeatureForCell(h3Index: string): GeoJSON.Feature<GeoJSON.Polygon> {
+  const ring = cellToBoundary(h3Index).map(([lat, lng]) => [lng, lat] as [number, number]);
+  ring.push(ring[0]);
+  return {
+    type: "Feature",
+    properties: { h3Index },
+    geometry: { type: "Polygon", coordinates: [ring] }
+  };
+}
+
 function loadCanvasImage(url: string, cache: globalThis.Map<string, HTMLImageElement>) {
   const cached = cache.get(url);
   if (cached) return Promise.resolve(cached);
@@ -469,6 +482,8 @@ export function EarthMap() {
     map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "bottom-right");
     map.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-left");
     map.resize();
+    let dashboardPulseTimer: number | null = null;
+    let dashboardPulseInterval: number | null = null;
 
     const focusForFirstPurchase = () => {
       setSelectedHex(null);
@@ -563,6 +578,10 @@ export function EarthMap() {
         type: "geojson",
         data: { type: "FeatureCollection", features: [] }
       });
+      map.addSource(dashboardFocusSourceId, {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] }
+      });
       map.addLayer({
         id: fillLayerId,
         source: sourceId,
@@ -609,6 +628,26 @@ export function EarthMap() {
         }
       });
 
+      map.addLayer({
+        id: dashboardFocusFillLayerId,
+        source: dashboardFocusSourceId,
+        type: "fill",
+        paint: {
+          "fill-color": "#f8fafc",
+          "fill-opacity": 0.34
+        }
+      });
+      map.addLayer({
+        id: dashboardFocusLineLayerId,
+        source: dashboardFocusSourceId,
+        type: "line",
+        paint: {
+          "line-color": "#67e8f9",
+          "line-opacity": 1,
+          "line-width": 3
+        }
+      });
+
       applyLayerVisibility(map, layerVisibilityRef.current);
 
       void loadHexes();
@@ -633,6 +672,33 @@ export function EarthMap() {
             })
             .catch((error) => console.error("Callback hex lookup failed", error));
         }
+      }
+
+      const dashboardFocusHex = new URLSearchParams(window.location.search).get("focusHex");
+      if (dashboardFocusHex && isValidCell(dashboardFocusHex)) {
+        setSelectedHex(null);
+        const [lat, lng] = cellToLatLng(dashboardFocusHex);
+        const focusSource = map.getSource(dashboardFocusSourceId) as maplibregl.GeoJSONSource;
+        focusSource.setData({ type: "FeatureCollection", features: [polygonFeatureForCell(dashboardFocusHex)] });
+        if (customImageCanvasRef.current) customImageCanvasRef.current.style.opacity = "0.35";
+        map.flyTo({ center: [lng, lat], zoom: 7, duration: 1500, essential: true });
+        map.once("moveend", () => {
+          let bright = true;
+          dashboardPulseInterval = window.setInterval(() => {
+            bright = !bright;
+            if (map.getLayer(dashboardFocusFillLayerId)) {
+              map.setPaintProperty(dashboardFocusFillLayerId, "fill-opacity", bright ? 0.42 : 0.12);
+              map.setPaintProperty(dashboardFocusLineLayerId, "line-opacity", bright ? 1 : 0.45);
+            }
+          }, 360);
+          dashboardPulseTimer = window.setTimeout(() => {
+            if (dashboardPulseInterval !== null) window.clearInterval(dashboardPulseInterval);
+            dashboardPulseInterval = null;
+            focusSource.setData({ type: "FeatureCollection", features: [] });
+            if (customImageCanvasRef.current) customImageCanvasRef.current.style.opacity = "1";
+          }, 2600);
+        });
+        window.history.replaceState(null, "", window.location.pathname);
       }
     });
 
@@ -723,6 +789,9 @@ export function EarthMap() {
     return () => {
       if (imageFrame !== null) window.cancelAnimationFrame(imageFrame);
       if (moveEndTimer !== null) window.clearTimeout(moveEndTimer);
+      if (dashboardPulseTimer !== null) window.clearTimeout(dashboardPulseTimer);
+      if (dashboardPulseInterval !== null) window.clearInterval(dashboardPulseInterval);
+      if (customImageCanvasRef.current) customImageCanvasRef.current.style.opacity = "1";
       imageDrawRef.current += 1;
       clearCustomImageCanvas(customImageCanvasRef.current);
       window.removeEventListener("pixel-earth:claim-first-hex", focusForFirstPurchase);

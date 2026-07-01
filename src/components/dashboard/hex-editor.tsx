@@ -17,6 +17,8 @@ type Hex = {
   avatarUrl: string | null;
   imageUrl: string | null;
   link: string | null;
+  latitude: number | null;
+  longitude: number | null;
 };
 
 export function HexEditor({ hex }: { hex: Hex }) {
@@ -24,6 +26,9 @@ export function HexEditor({ hex }: { hex: Hex }) {
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [imageUrl, setImageUrl] = useState(hex.imageUrl ?? "");
+  const location = hex.latitude !== null && hex.longitude !== null
+    ? `${hex.latitude.toFixed(4)}, ${hex.longitude.toFixed(4)}`
+    : "Location unavailable";
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -61,6 +66,7 @@ export function HexEditor({ hex }: { hex: Hex }) {
         <div className="min-w-0 space-y-1">
           <h3 className="truncate font-semibold">{hex.title || "Untitled hex"}</h3>
           <p className="truncate text-xs text-muted-foreground">{hex.h3Index}</p>
+          <p className="truncate text-xs text-cyan-200">{location}</p>
           {hex.message ? <p className="line-clamp-2 text-sm text-muted-foreground">{hex.message}</p> : <p className="text-sm text-muted-foreground">No message yet.</p>}
         </div>
         <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-col">
@@ -69,7 +75,7 @@ export function HexEditor({ hex }: { hex: Hex }) {
             {editing ? "Close" : "Edit"}
           </Button>
           <Button asChild type="button" variant="outline" size="sm">
-            <Link href={`/?hex=${encodeURIComponent(hex.h3Index)}`}><Eye className="h-4 w-4" /> View on Map</Link>
+            <Link href={`/?focusHex=${encodeURIComponent(hex.h3Index)}`}><Eye className="h-4 w-4" /> View on Map</Link>
           </Button>
         </div>
       </div>

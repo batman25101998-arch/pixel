@@ -10,6 +10,7 @@ export default function HomePage() {
         <div className="max-w-sm">
           <h1 className="text-lg font-semibold leading-tight text-white md:text-3xl lg:text-5xl">Own a permanent piece of Earth.</h1>
           <div className="mt-2 space-y-0.5 text-sm leading-5 text-slate-300 md:mt-4 md:space-y-1 md:leading-6 lg:mt-7 lg:text-base lg:leading-8">
+            <p className="font-medium text-emerald-300">Every available hex costs just $1.</p>
             <p>Add your photo.</p>
             <p>Add your message.</p>
             <p>Keep it forever.</p>
