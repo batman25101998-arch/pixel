@@ -18,6 +18,7 @@ const selectedLineLayerId = "earth-hex-selected-line";
 const dashboardFocusSourceId = "earth-hex-dashboard-focus";
 const dashboardFocusFillLayerId = "earth-hex-dashboard-focus-fill";
 const dashboardFocusLineLayerId = "earth-hex-dashboard-focus-line";
+export const HEX_INTERACTION_ZOOM = 7;
 type LayerVisibility = {
   images: boolean;
   hexGrid: boolean;
@@ -448,6 +449,7 @@ export function EarthMap() {
   const customImageCacheRef = useRef(new globalThis.Map<string, HTMLImageElement>());
   const imageDrawRef = useRef(0);
   const [layersOpen, setLayersOpen] = useState(false);
+  const [interactionHint, setInteractionHint] = useState(false);
   const requestRef = useRef(0);
   const imageRequestRef = useRef(0);
   const [layerVisibility, setLayerVisibility] = useState<LayerVisibility>({
@@ -484,6 +486,54 @@ export function EarthMap() {
     map.resize();
     let dashboardPulseTimer: number | null = null;
     let dashboardPulseInterval: number | null = null;
+    let interactionHintTimer: number | null = null;
+
+    function pulseHex(h3Index: string) {
+      if (dashboardPulseTimer !== null) window.clearTimeout(dashboardPulseTimer);
+      if (dashboardPulseInterval !== null) window.clearInterval(dashboardPulseInterval);
+      const focusSource = map.getSource(dashboardFocusSourceId) as maplibregl.GeoJSONSource | undefined;
+      if (!focusSource) return;
+      focusSource.setData({ type: "FeatureCollection", features: [polygonFeatureForCell(h3Index)] });
+      if (customImageCanvasRef.current) customImageCanvasRef.current.style.opacity = "0.35";
+      let bright = true;
+      dashboardPulseInterval = window.setInterval(() => {
+        bright = !bright;
+        if (map.getLayer(dashboardFocusFillLayerId)) {
+          map.setPaintProperty(dashboardFocusFillLayerId, "fill-opacity", bright ? 0.42 : 0.12);
+          map.setPaintProperty(dashboardFocusLineLayerId, "line-opacity", bright ? 1 : 0.45);
+        }
+      }, 360);
+      dashboardPulseTimer = window.setTimeout(() => {
+        if (dashboardPulseInterval !== null) window.clearInterval(dashboardPulseInterval);
+        dashboardPulseInterval = null;
+        focusSource.setData({ type: "FeatureCollection", features: [] });
+        if (customImageCanvasRef.current) customImageCanvasRef.current.style.opacity = "1";
+      }, 2600);
+    }
+
+    function showInteractionHint() {
+      if (interactionHintTimer !== null) window.clearTimeout(interactionHintTimer);
+      setInteractionHint(true);
+      interactionHintTimer = window.setTimeout(() => setInteractionHint(false), 2800);
+    }
+
+    function openHexOrZoom(selection: SelectedHex) {
+      if (map.getZoom() < HEX_INTERACTION_ZOOM) {
+        setSelectedHex(null);
+        pulseHex(selection.h3Index);
+        showInteractionHint();
+        map.flyTo({
+          center: [selection.lng, selection.lat],
+          zoom: HEX_INTERACTION_ZOOM,
+          duration: 1100,
+          essential: true
+        });
+        return false;
+      }
+      setInteractionHint(false);
+      setSelectedHex(selection);
+      return true;
+    }
 
     const focusForFirstPurchase = () => {
       setSelectedHex(null);
@@ -657,47 +707,31 @@ export function EarthMap() {
       if (requestedHex && isValidCell(requestedHex)) {
         const [lat, lng] = cellToLatLng(requestedHex);
         const selection: SelectedHex = { h3Index: requestedHex, lng, lat };
-        setSelectedHex(selection);
+        map.once("moveend", () => {
+          setSelectedHex(selection);
+          if (!isClientDemoMode) {
+            void loadPersistedSelection(selection)
+              .then((persistedSelection) => {
+                if (useMapStore.getState().selectedHex?.h3Index === persistedSelection.h3Index) {
+                  setSelectedHex(persistedSelection);
+                }
+              })
+              .catch((error) => console.error("Callback hex lookup failed", error));
+          }
+        });
         map.flyTo({
           center: [lng, lat],
-          zoom: Math.max(map.getZoom(), 5.5),
+          zoom: Math.max(map.getZoom(), HEX_INTERACTION_ZOOM),
           essential: true
         });
-        if (!isClientDemoMode) {
-          void loadPersistedSelection(selection)
-            .then((persistedSelection) => {
-              if (useMapStore.getState().selectedHex?.h3Index === persistedSelection.h3Index) {
-                setSelectedHex(persistedSelection);
-              }
-            })
-            .catch((error) => console.error("Callback hex lookup failed", error));
-        }
       }
 
       const dashboardFocusHex = new URLSearchParams(window.location.search).get("focusHex");
       if (dashboardFocusHex && isValidCell(dashboardFocusHex)) {
         setSelectedHex(null);
         const [lat, lng] = cellToLatLng(dashboardFocusHex);
-        const focusSource = map.getSource(dashboardFocusSourceId) as maplibregl.GeoJSONSource;
-        focusSource.setData({ type: "FeatureCollection", features: [polygonFeatureForCell(dashboardFocusHex)] });
-        if (customImageCanvasRef.current) customImageCanvasRef.current.style.opacity = "0.35";
         map.flyTo({ center: [lng, lat], zoom: 7, duration: 1500, essential: true });
-        map.once("moveend", () => {
-          let bright = true;
-          dashboardPulseInterval = window.setInterval(() => {
-            bright = !bright;
-            if (map.getLayer(dashboardFocusFillLayerId)) {
-              map.setPaintProperty(dashboardFocusFillLayerId, "fill-opacity", bright ? 0.42 : 0.12);
-              map.setPaintProperty(dashboardFocusLineLayerId, "line-opacity", bright ? 1 : 0.45);
-            }
-          }, 360);
-          dashboardPulseTimer = window.setTimeout(() => {
-            if (dashboardPulseInterval !== null) window.clearInterval(dashboardPulseInterval);
-            dashboardPulseInterval = null;
-            focusSource.setData({ type: "FeatureCollection", features: [] });
-            if (customImageCanvasRef.current) customImageCanvasRef.current.style.opacity = "1";
-          }, 2600);
-        });
+        map.once("moveend", () => pulseHex(dashboardFocusHex));
         window.history.replaceState(null, "", window.location.pathname);
       }
     });
@@ -750,13 +784,7 @@ export function EarthMap() {
       if (features[0]) {
         const props = features[0].properties as Record<string, string | number | null>;
         const selection = selectedHexFromProperties(props);
-        setSelectedHex(selection);
-        map.flyTo({
-          center: [selection.lng, selection.lat],
-          zoom: Math.max(map.getZoom(), window.innerWidth < 768 ? 7 : 6),
-          duration: 900,
-          essential: true
-        });
+        if (!openHexOrZoom(selection)) return;
         if (!isClientDemoMode) {
           void loadPersistedSelection(selection)
             .then((persistedSelection) => {
@@ -777,13 +805,7 @@ export function EarthMap() {
       });
       const data = await response.json();
       const selection = { h3Index: data.h3Index, lng: event.lngLat.lng, lat: event.lngLat.lat };
-      setSelectedHex(selection);
-      map.flyTo({
-        center: [selection.lng, selection.lat],
-        zoom: Math.max(map.getZoom(), window.innerWidth < 768 ? 7 : 6),
-        duration: 900,
-        essential: true
-      });
+      openHexOrZoom(selection);
     });
 
     return () => {
@@ -791,6 +813,7 @@ export function EarthMap() {
       if (moveEndTimer !== null) window.clearTimeout(moveEndTimer);
       if (dashboardPulseTimer !== null) window.clearTimeout(dashboardPulseTimer);
       if (dashboardPulseInterval !== null) window.clearInterval(dashboardPulseInterval);
+      if (interactionHintTimer !== null) window.clearTimeout(interactionHintTimer);
       if (customImageCanvasRef.current) customImageCanvasRef.current.style.opacity = "1";
       imageDrawRef.current += 1;
       clearCustomImageCanvas(customImageCanvasRef.current);
@@ -921,6 +944,11 @@ export function EarthMap() {
     <div className="relative h-full min-h-0 w-full overflow-hidden bg-[#071525]" style={{ height: "100%", minHeight: 0, width: "100%" }}>
       <div ref={containerRef} className="h-full min-h-0 w-full" style={{ height: "100%", minHeight: 0, width: "100%" }} />
       <canvas ref={customImageCanvasRef} className="pointer-events-none absolute inset-0 z-[5] h-full w-full" aria-hidden="true" />
+      {interactionHint ? (
+        <div role="status" className="pointer-events-none absolute left-1/2 top-20 z-20 -translate-x-1/2 whitespace-nowrap rounded-md border border-cyan-300/25 bg-[#0b1117] px-3 py-2 text-xs font-medium text-cyan-100 shadow-xl sm:text-sm">
+          Click again to view this hex.
+        </div>
+      ) : null}
       <button
         type="button"
         aria-label={layersOpen ? "Close map layers" : "Open map layers"}
