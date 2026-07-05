@@ -125,8 +125,7 @@ export function PurchasePanel() {
     setConfirmPurchase(false);
     if (purchaseImageInputRef.current) purchaseImageInputRef.current.value = "";
 
-    const resumeRequested = new URLSearchParams(window.location.search).get("resumePurchase") === "1";
-    const pendingDraft = resumeRequested ? getPendingHexPurchase() : null;
+    const pendingDraft = getPendingHexPurchase();
     if (pendingDraft?.h3Index === selectedHex.h3Index && !selectedHex.purchased) {
       setTitle(pendingDraft.title);
       setMessage(pendingDraft.message);
@@ -134,6 +133,7 @@ export function PurchasePanel() {
       setExternalLink(pendingDraft.externalLink);
       setError(pendingDraft.uploadWarning ?? null);
       setConfirmPurchase(true);
+      console.info("[pending-purchase] restored pending purchase", { h3Index: pendingDraft.h3Index });
       return;
     }
 
@@ -271,7 +271,7 @@ export function PurchasePanel() {
         createdAt: new Date().toISOString(),
         uploadWarning
       });
-      redirectToSignIn("/purchase/resume");
+      redirectToSignIn("/");
       return;
     }
 
@@ -475,6 +475,15 @@ export function PurchasePanel() {
     setError(null);
   }
 
+  function closePurchaseConfirmation(discardDraft = false) {
+    setConfirmPurchase(false);
+    if (!discardDraft || !selectedHex) return;
+    const pendingDraft = getPendingHexPurchase();
+    if (pendingDraft?.h3Index === selectedHex.h3Index) {
+      clearPendingHexPurchase("user canceled draft");
+    }
+  }
+
   return (
     <div className="absolute inset-0 z-30 flex items-end justify-center bg-black/25 md:items-center md:bg-black/45 md:p-4 md:backdrop-blur-sm">
       <div
@@ -629,7 +638,7 @@ export function PurchasePanel() {
       {confirmPurchase ? (
         <div
           className="fixed inset-0 z-50 flex items-end bg-black/70 md:items-center md:justify-center md:p-4"
-          onClick={() => setConfirmPurchase(false)}
+          onClick={() => closePurchaseConfirmation()}
           onTouchStart={(event) => event.stopPropagation()}
         >
           <div
@@ -647,7 +656,7 @@ export function PurchasePanel() {
             </p>
             {error ? <p className="mt-3 text-sm text-amber-300">{error}</p> : null}
             <div className="mt-6 grid grid-cols-2 gap-3">
-              <Button type="button" variant="outline" className="h-11" onClick={() => setConfirmPurchase(false)}>Cancel</Button>
+              <Button type="button" variant="outline" className="h-11" onClick={() => closePurchaseConfirmation(true)}>Cancel</Button>
               <Button
                 type="button"
                 className="h-11"

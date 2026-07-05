@@ -14,7 +14,7 @@ export function CheckoutCancelActions({ mapHref }: { mapHref: string }) {
 
   return (
     <div className="grid gap-2">
-      {canResume ? <Button asChild><Link href="/purchase/resume">Resume Purchase</Link></Button> : null}
+      {canResume ? <Button asChild><Link href="/">Resume Purchase</Link></Button> : null}
       <Button asChild variant={canResume ? "outline" : "default"}><Link href={mapHref}>Return to hex</Link></Button>
     </div>
   );

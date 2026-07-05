@@ -15,10 +15,12 @@ export type PendingHexPurchase = {
 
 export function savePendingHexPurchase(draft: PendingHexPurchase) {
   window.localStorage.setItem(PENDING_HEX_PURCHASE_KEY, JSON.stringify(draft));
+  console.info("[pending-purchase] saved pending purchase", { h3Index: draft.h3Index, createdAt: draft.createdAt });
 }
 
-export function clearPendingHexPurchase() {
+export function clearPendingHexPurchase(reason = "completed") {
   window.localStorage.removeItem(PENDING_HEX_PURCHASE_KEY);
+  console.info("[pending-purchase] cleared pending purchase", { reason });
 }
 
 export function getPendingHexPurchase(): PendingHexPurchase | null {
@@ -41,7 +43,7 @@ export function getPendingHexPurchase(): PendingHexPurchase | null {
       Date.now() - createdAt <= MAX_DRAFT_AGE_MS;
 
     if (!valid) {
-      clearPendingHexPurchase();
+      clearPendingHexPurchase("invalid or older than 24 hours");
       return null;
     }
 
@@ -57,7 +59,7 @@ export function getPendingHexPurchase(): PendingHexPurchase | null {
       uploadWarning: typeof draft.uploadWarning === "string" ? draft.uploadWarning : undefined
     };
   } catch {
-    clearPendingHexPurchase();
+    clearPendingHexPurchase("invalid JSON");
     return null;
   }
 }
