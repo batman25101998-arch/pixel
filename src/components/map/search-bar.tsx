@@ -58,8 +58,8 @@ export function SearchBar() {
       setError(null);
       setActiveLabel(null);
     };
-    window.addEventListener("pixel-earth:claim-first-hex", closeSuggestions);
-    return () => window.removeEventListener("pixel-earth:claim-first-hex", closeSuggestions);
+    window.addEventListener("pixel-earth:buy-first-hex", closeSuggestions);
+    return () => window.removeEventListener("pixel-earth:buy-first-hex", closeSuggestions);
   }, []);
 
   function selectResult(result: SearchResult) {

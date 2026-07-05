@@ -560,7 +560,7 @@ export function EarthMap() {
         notified = true;
         map.off("moveend", notifyReady);
         if (ctaReadyTimer !== null) window.clearTimeout(ctaReadyTimer);
-        window.dispatchEvent(new CustomEvent("pixel-earth:claim-first-hex-ready"));
+        window.dispatchEvent(new CustomEvent("pixel-earth:buy-first-hex-ready"));
       };
       map.once("moveend", notifyReady);
       map.flyTo({
@@ -572,7 +572,7 @@ export function EarthMap() {
       ctaReadyTimer = window.setTimeout(notifyReady, 1300);
       map.getCanvas().focus({ preventScroll: true });
     };
-    window.addEventListener("pixel-earth:claim-first-hex", focusForFirstPurchase);
+    window.addEventListener("pixel-earth:buy-first-hex", focusForFirstPurchase);
 
     function tintBaseMap() {
       if (!map.isStyleLoaded() || map.getLayer("pixel-world-ocean")) return;
@@ -871,7 +871,7 @@ export function EarthMap() {
       if (customImageCanvasRef.current) customImageCanvasRef.current.style.opacity = "1";
       imageDrawRef.current += 1;
       clearCustomImageCanvas(customImageCanvasRef.current);
-      window.removeEventListener("pixel-earth:claim-first-hex", focusForFirstPurchase);
+      window.removeEventListener("pixel-earth:buy-first-hex", focusForFirstPurchase);
       searchMarkerRef.current?.remove();
       map.remove();
       mapRef.current = null;

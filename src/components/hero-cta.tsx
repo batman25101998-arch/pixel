@@ -13,9 +13,9 @@ export function HeroCta() {
       if (hideTimer !== null) window.clearTimeout(hideTimer);
       hideTimer = window.setTimeout(() => setToastVisible(false), 3200);
     };
-    window.addEventListener("pixel-earth:claim-first-hex-ready", showToast);
+    window.addEventListener("pixel-earth:buy-first-hex-ready", showToast);
     return () => {
-      window.removeEventListener("pixel-earth:claim-first-hex-ready", showToast);
+      window.removeEventListener("pixel-earth:buy-first-hex-ready", showToast);
       if (hideTimer !== null) window.clearTimeout(hideTimer);
     };
   }, []);
@@ -23,7 +23,7 @@ export function HeroCta() {
   function focusMap() {
     document.getElementById("world-map")?.scrollIntoView({ behavior: "smooth", block: "start" });
     setToastVisible(false);
-    window.dispatchEvent(new CustomEvent("pixel-earth:claim-first-hex"));
+    window.dispatchEvent(new CustomEvent("pixel-earth:buy-first-hex"));
   }
 
   return (
