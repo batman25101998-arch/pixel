@@ -1,6 +1,5 @@
-import Link from "next/link";
 import { XCircle } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { CheckoutCancelActions } from "@/components/checkout/checkout-cancel-actions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 type CheckoutCancelPageProps = {
@@ -17,7 +16,7 @@ export default async function CheckoutCancelPage({ searchParams }: CheckoutCance
         <CardHeader><CardTitle className="flex items-center gap-2"><XCircle className="h-6 w-6 text-amber-400" />Checkout canceled</CardTitle></CardHeader>
         <CardContent className="space-y-5">
           <p className="text-sm text-muted-foreground">You were not charged and the hex remains available.</p>
-          <Button asChild className="w-full"><Link href={mapHref}>Return to hex</Link></Button>
+          <CheckoutCancelActions mapHref={mapHref} />
         </CardContent>
       </Card>
     </main>
