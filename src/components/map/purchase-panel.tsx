@@ -99,6 +99,7 @@ export function PurchasePanel() {
   const isOwnHex = status === "MY_OWNED";
   const price = purchased?.priceCents ?? 100;
   const coordinates = selectedHex ? coordinateLabel(selectedHex.lat, selectedHex.lng) : "";
+  const previewImageUrl = purchased?.imageUrl ?? null;
 
   const previewStyle = useMemo(() => {
     if (!selectedHex) return {};
@@ -464,7 +465,9 @@ export function PurchasePanel() {
           <div className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-[150px_1fr]">
               <div className="flex aspect-square items-center justify-center rounded-lg border border-cyan-200/20 bg-background/60">
-                <div className="mock-legend-hex h-24 w-24 border border-white/25 shadow-lg shadow-cyan-950/40" style={previewStyle} />
+                <div className="mock-legend-hex h-24 w-24 overflow-hidden border border-white/25 shadow-lg shadow-cyan-950/40" style={previewStyle}>
+                  {previewImageUrl ? <img src={previewImageUrl} alt="Hex image" className="block h-full w-full object-cover" /> : null}
+                </div>
               </div>
               <div className="space-y-3 rounded-lg border border-border bg-background/55 p-3">
                 <div>
