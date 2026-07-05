@@ -99,7 +99,7 @@ export function PurchasePanel() {
   const isOwnHex = status === "MY_OWNED";
   const price = purchased?.priceCents ?? 100;
   const coordinates = selectedHex ? coordinateLabel(selectedHex.lat, selectedHex.lng) : "";
-  const previewImageUrl = purchased?.imageUrl ?? null;
+  const previewImageUrl = purchased?.imageUrl || imageUrl || null;
 
   const previewStyle = useMemo(() => {
     if (!selectedHex) return {};

@@ -182,7 +182,7 @@ type PersistedHexResponse = {
   } | null;
 };
 
-function selectedHexFromProperties(props: Record<string, string | number | null>): SelectedHex {
+function selectedHexFromProperties(props: Record<string, unknown>): SelectedHex {
   const status = props.status ? String(props.status) : "AVAILABLE";
   return {
     h3Index: String(props.h3Index),
@@ -782,8 +782,18 @@ export function EarthMap() {
     map.on("click", async (event) => {
       const features = map.queryRenderedFeatures(event.point, { layers: [fillLayerId] });
       if (features[0]) {
-        const props = features[0].properties as Record<string, string | number | null>;
-        const selection = selectedHexFromProperties(props);
+        const props = features[0].properties as Record<string, unknown>;
+        const h3Index = String(props.h3Index ?? "");
+        const imageFeature = customImageDataRef.current.features.find((feature) => String(feature.properties?.h3Index ?? "") === h3Index);
+        const imageProperties = imageFeature?.properties ?? {};
+        const baseStatus = props.status ? String(props.status) : "AVAILABLE";
+        const mergedProperties: Record<string, unknown> = {
+          ...props,
+          ...imageProperties,
+          status: baseStatus === "AVAILABLE" ? imageProperties.status ?? baseStatus : baseStatus,
+          imageUrl: imageProperties.imageUrl ?? props.imageUrl ?? null
+        };
+        const selection = selectedHexFromProperties(mergedProperties);
         if (!openHexOrZoom(selection)) return;
         if (!isClientDemoMode) {
           void loadPersistedSelection(selection)
