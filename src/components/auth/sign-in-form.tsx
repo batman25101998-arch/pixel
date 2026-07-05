@@ -1,8 +1,8 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
-import { signIn } from "next-auth/react";
+import { signIn, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,11 +19,18 @@ type BusyProvider = "google" | "credentials" | null;
 
 export function SignInForm({ googleEnabled, callbackUrl }: SignInFormProps) {
   const router = useRouter();
+  const session = useSession();
   const destination = safeAuthCallbackUrl(callbackUrl);
   const [busyProvider, setBusyProvider] = useState<BusyProvider>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (session.status === "authenticated") {
+      router.replace(destination);
+    }
+  }, [destination, router, session.status]);
 
   async function signInWithGoogle() {
     setBusyProvider("google");
