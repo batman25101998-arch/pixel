@@ -3,8 +3,6 @@ import { z } from "zod";
 export const hexPatchSchema = z.object({
   title: z.string().trim().max(80).optional(),
   message: z.string().max(240).optional(),
-  avatarUrl: z.string().url().nullable().optional(),
-  imageUrl: z.string().url().nullable().optional(),
   externalLink: z.string().url().nullable().optional()
 });
 
@@ -12,8 +10,13 @@ export const checkoutSchema = z.object({
   h3Index: z.string().min(1),
   title: z.string().trim().max(80).default(""),
   message: z.string().max(240).default(""),
-  avatarUrl: z.string().url().optional(),
-  imageUrl: z.string().url().optional(),
+  uploadedImageUrl: z.string().url().refine((value) => {
+    try {
+      return new URL(value).hostname.endsWith(".blob.vercel-storage.com");
+    } catch {
+      return false;
+    }
+  }, "Uploaded image must come from Vercel Blob.").optional(),
   externalLink: z.string().url().optional()
 });
 

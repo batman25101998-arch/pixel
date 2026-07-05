@@ -56,7 +56,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       identifier: id,
       userId: session.user.id,
       fields: body && typeof body === "object" ? Object.keys(body) : [],
-      imageUrl: body && typeof body === "object" && "imageUrl" in body ? body.imageUrl : undefined,
       externalLink: body && typeof body === "object" && "externalLink" in body ? body.externalLink : undefined
     });
 
@@ -82,8 +81,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       data: {
         title: parsed.data.title,
         message: parsed.data.message,
-        avatarUrl: parsed.data.avatarUrl,
-        imageUrl: parsed.data.imageUrl,
         link: parsed.data.externalLink
       },
       include: { owner: { select: { id: true, username: true, displayName: true, avatarUrl: true, founderNumber: true, kingdomUnlockedAt: true } } }

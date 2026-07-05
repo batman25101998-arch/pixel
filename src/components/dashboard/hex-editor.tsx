@@ -15,7 +15,6 @@ type Hex = {
   h3Index: string;
   title: string;
   message: string;
-  avatarUrl: string | null;
   imageUrl: string | null;
   link: string | null;
   latitude: number | null;
@@ -43,8 +42,6 @@ export function HexEditor({ hex }: { hex: Hex }) {
         body: JSON.stringify({
           title: String(form.get("title")),
           message: String(form.get("message")),
-          avatarUrl: String(form.get("avatarUrl") || "") || null,
-          imageUrl: imageUrl || null,
           externalLink: String(form.get("externalLink") || "") || null
         })
       });
@@ -86,10 +83,6 @@ export function HexEditor({ hex }: { hex: Hex }) {
           <div className="space-y-1.5"><Label htmlFor={`title-${hex.id}`}>Collectible title</Label><Input id={`title-${hex.id}`} name="title" defaultValue={hex.title} maxLength={80} /></div>
           <div className="space-y-1.5"><Label htmlFor={`message-${hex.id}`}>Message</Label><Textarea id={`message-${hex.id}`} name="message" defaultValue={hex.message} maxLength={240} /></div>
           <div className="space-y-1.5"><Label htmlFor={`link-${hex.id}`}>External link</Label><Input id={`link-${hex.id}`} name="externalLink" type="url" defaultValue={hex.link ?? ""} placeholder="https://..." /></div>
-          <div className="grid gap-3 md:grid-cols-2">
-            <div className="space-y-1.5"><Label htmlFor={`avatar-${hex.id}`}>Avatar URL</Label><Input id={`avatar-${hex.id}`} name="avatarUrl" type="url" defaultValue={hex.avatarUrl ?? ""} placeholder="https://..." /></div>
-            <div className="space-y-1.5"><Label htmlFor={`image-${hex.id}`}>Image URL</Label><Input id={`image-${hex.id}`} name="imageUrl" type="url" value={imageUrl} onChange={(event) => setImageUrl(event.target.value)} placeholder="https://..." /></div>
-          </div>
           <HexImageUpload hexId={hex.id} imageUrl={imageUrl || null} onImageChange={(nextImageUrl) => setImageUrl(nextImageUrl ?? "")} />
           <div className="flex flex-wrap items-center gap-3">
             <Button disabled={saving} className="min-h-11">

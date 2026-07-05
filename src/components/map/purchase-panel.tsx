@@ -81,7 +81,6 @@ export function PurchasePanel() {
   const refresh = useMapStore((state) => state.refresh);
   const [message, setMessage] = useState("");
   const [title, setTitle] = useState("");
-  const [avatarUrl, setAvatarUrl] = useState("");
   const [imageUrl, setImageUrl] = useState("");
   const [externalLink, setExternalLink] = useState("");
   const [busy, setBusy] = useState(false);
@@ -121,7 +120,6 @@ export function PurchasePanel() {
     const saved = isClientDemoMode ? getDemoOwnedHexes().find((hex) => hex.h3Index === selectedHex.h3Index) : null;
     setTitle(saved?.title ?? selectedHex.purchased?.title ?? "");
     setMessage(saved?.message ?? selectedHex.purchased?.message ?? "");
-    setAvatarUrl(saved?.avatarUrl ?? selectedHex.purchased?.avatarUrl ?? "");
     setImageUrl(saved?.imageUrl ?? selectedHex.purchased?.imageUrl ?? "");
     setExternalLink(saved?.externalLink ?? selectedHex.purchased?.externalLink ?? "");
   }, [selectedHex]);
@@ -237,7 +235,6 @@ export function PurchasePanel() {
         longitude: selectedHex.lng,
         title,
         message,
-        avatarUrl: avatarUrl || null,
         imageUrl: imageUrl || null,
         externalLink: externalLink || null,
         priceCents: price
@@ -248,7 +245,7 @@ export function PurchasePanel() {
         latitude: selectedHex.lat,
         longitude: selectedHex.lng,
         ownerName: DEMO_USER.name,
-        ownerImage: avatarUrl || null,
+        ownerImage: null,
         title,
         message,
         imageUrl: imageUrl || null,
@@ -264,8 +261,7 @@ export function PurchasePanel() {
         purchased: {
           id,
           ownerName: DEMO_USER.name,
-              ownerImage: avatarUrl || null,
-              avatarUrl: avatarUrl || null,
+              ownerImage: null,
               title,
               message,
               imageUrl: imageUrl || null,
@@ -309,8 +305,7 @@ export function PurchasePanel() {
         h3Index: selectedHex.h3Index,
         title,
         message,
-        avatarUrl: avatarUrl || undefined,
-        imageUrl: checkoutImageUrl,
+        uploadedImageUrl: checkoutImageUrl,
         externalLink: externalLink || undefined
       })
     });
@@ -335,8 +330,6 @@ export function PurchasePanel() {
         updateDemoHexMetadata(selectedHex.h3Index, {
           message,
           title,
-          avatarUrl: avatarUrl || null,
-          imageUrl: imageUrl || null,
           externalLink: externalLink || null
         });
       } else {
@@ -346,8 +339,6 @@ export function PurchasePanel() {
           body: JSON.stringify({
             message,
             title,
-            avatarUrl: avatarUrl || null,
-            imageUrl: imageUrl || null,
             externalLink: externalLink || null
           })
         });
@@ -361,11 +352,8 @@ export function PurchasePanel() {
         ...selectedHex,
         purchased: {
           ...selectedHex.purchased,
-          ownerImage: avatarUrl || null,
-          avatarUrl: avatarUrl || null,
           title,
           message,
-          imageUrl: imageUrl || null,
           externalLink: externalLink || null
         }
       });
@@ -518,14 +506,8 @@ export function PurchasePanel() {
                   <div className="space-y-3 border-t border-border pt-3">
                     <div className="space-y-1.5"><Label htmlFor="owned-title">Title</Label><Input id="owned-title" maxLength={80} value={title} onChange={(event) => setTitle(event.target.value)} /></div>
                     <div className="space-y-1.5"><Label htmlFor="owned-message">Message</Label><Textarea id="owned-message" maxLength={240} value={message} onChange={(event) => setMessage(event.target.value)} /></div>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <div className="space-y-1.5"><Label htmlFor="owned-avatar">Avatar URL</Label><Input id="owned-avatar" value={avatarUrl} onChange={(event) => setAvatarUrl(event.target.value)} /></div>
-                      <div className="space-y-1.5"><Label htmlFor="owned-image">Image URL</Label><Input id="owned-image" type="url" value={imageUrl} onChange={(event) => setImageUrl(event.target.value)} placeholder="https://..." /></div>
-                    </div>
                     <HexImageUpload hexId={purchased.id} imageUrl={imageUrl || null} disabled={isClientDemoMode} onImageChange={applyUploadedImage} />
                     <div className="space-y-1.5"><Label htmlFor="owned-link">External link</Label><Input id="owned-link" type="url" value={externalLink} onChange={(event) => setExternalLink(event.target.value)} /></div>
-                    {avatarUrl ? <img src={avatarUrl} alt="Avatar preview" className="h-12 w-12 rounded-full object-cover" /> : null}
-                    {imageUrl ? <img src={imageUrl} alt="Image preview" className="aspect-video w-full rounded-md object-cover" /> : null}
                     <Button type="button" variant="outline" className="w-full" disabled={busy} onClick={saveMetadata}>
                       {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                       Save hex details
@@ -539,16 +521,6 @@ export function PurchasePanel() {
                 <div className="space-y-1.5">
                   <Label htmlFor="message">Message</Label>
                   <Textarea id="message" maxLength={240} value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Leave a marker for future explorers." />
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="avatar">Avatar URL</Label>
-                    <Input id="avatar" value={avatarUrl} onChange={(event) => setAvatarUrl(event.target.value)} placeholder="https://..." />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="image">Image URL</Label>
-                    <Input id="image" value={imageUrl} onChange={(event) => setImageUrl(event.target.value)} placeholder="https://..." />
-                  </div>
                 </div>
                 <div className="space-y-3 rounded-md border border-border bg-background p-3">
                   <div>

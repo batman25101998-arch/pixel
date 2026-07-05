@@ -25,8 +25,7 @@ export async function POST(request: Request) {
     title: parsed.data.title,
     message: parsed.data.message
   };
-  if (parsed.data.avatarUrl) paymentMetadata.avatarUrl = parsed.data.avatarUrl;
-  if (parsed.data.imageUrl) paymentMetadata.imageUrl = parsed.data.imageUrl;
+  if (parsed.data.uploadedImageUrl) paymentMetadata.imageUrl = parsed.data.uploadedImageUrl;
   if (parsed.data.externalLink) paymentMetadata.externalLink = parsed.data.externalLink;
 
   const payment = await prisma.payment.create({
@@ -41,7 +40,7 @@ export async function POST(request: Request) {
     paymentId: payment.id,
     h3Index
   };
-  if (parsed.data.imageUrl) checkoutMetadata.imageUrl = parsed.data.imageUrl;
+  if (parsed.data.uploadedImageUrl) checkoutMetadata.imageUrl = parsed.data.uploadedImageUrl;
   console.info("[checkout] metadata", checkoutMetadata);
 
   const checkout = await stripe.checkout.sessions.create({

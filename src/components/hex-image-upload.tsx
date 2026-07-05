@@ -132,7 +132,7 @@ export function HexImageUpload({ hexId, imageUrl, disabled = false, onImageChang
           {busy === "remove" ? "Removing..." : "Remove image"}
         </Button>
       ) : null}
-      {disabled ? <p className="text-xs text-muted-foreground">Direct uploads require production storage. Image URLs still work in demo mode.</p> : null}
+      {disabled ? <p className="text-xs text-muted-foreground">Direct image uploads require production storage.</p> : null}
       {!disabled && blobAvailable === false ? (
         <p className="text-xs text-destructive">
           {blobUnavailableReason === "placeholder"

@@ -17,13 +17,11 @@ function DemoHexEditor({ hex }: { hex: DemoHex }) {
     updateDemoHexMetadata(hex.h3Index, {
       title: String(form.get("title") ?? ""),
       message: String(form.get("message") ?? ""),
-      avatarUrl: String(form.get("avatarUrl") || "") || null,
-      imageUrl: String(form.get("imageUrl") || "") || null,
       externalLink: String(form.get("externalLink") || "") || null
     });
     setStatus("Saved");
   }
-  return <form onSubmit={save} className="rounded-md border border-border p-4"><div className="flex justify-between gap-3"><p className="break-all font-semibold">{hex.h3Index}</p><span className="text-xs text-emerald-500">Owned permanently</span></div><div className="mt-3 grid gap-3"><div><Label>Title</Label><Input name="title" defaultValue={hex.title} /></div><div><Label>Message</Label><Textarea name="message" defaultValue={hex.message} /></div><div className="grid gap-3 sm:grid-cols-2"><div><Label>Avatar URL</Label><Input name="avatarUrl" type="url" defaultValue={hex.avatarUrl ?? ""} /></div><div><Label>Image URL</Label><Input name="imageUrl" type="url" defaultValue={hex.imageUrl ?? ""} /></div></div><div><Label>External link</Label><Input name="externalLink" type="url" defaultValue={hex.externalLink ?? ""} /></div>{hex.imageUrl ? <img src={hex.imageUrl} alt="Hex preview" className="aspect-video w-full max-w-md rounded-md object-cover" /> : null}<div className="flex items-center gap-3"><Button>Save content</Button>{status ? <span className="text-sm text-muted-foreground">{status}</span> : null}</div></div></form>;
+  return <form onSubmit={save} className="rounded-md border border-border p-4"><div className="flex justify-between gap-3"><p className="break-all font-semibold">{hex.h3Index}</p><span className="text-xs text-emerald-500">Owned permanently</span></div><div className="mt-3 grid gap-3"><div><Label>Title</Label><Input name="title" defaultValue={hex.title} /></div><div><Label>Message</Label><Textarea name="message" defaultValue={hex.message} /></div><div><Label>External link</Label><Input name="externalLink" type="url" defaultValue={hex.externalLink ?? ""} /></div>{hex.imageUrl ? <img src={hex.imageUrl} alt="Hex preview" className="aspect-video w-full max-w-md rounded-md object-cover" /> : null}<div className="flex items-center gap-3"><Button>Save content</Button>{status ? <span className="text-sm text-muted-foreground">{status}</span> : null}</div></div></form>;
 }
 
 export function DemoDashboard() {
