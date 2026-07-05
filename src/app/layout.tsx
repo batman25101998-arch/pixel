@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Earth, LayoutDashboard, UserCircle } from "lucide-react";
+import { Earth, UserCircle } from "lucide-react";
 import { auth } from "@/auth";
 import { Providers } from "@/components/providers";
 import { UserMenu } from "@/components/auth/user-menu";
@@ -28,7 +28,6 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
               </Link>
               <nav className="hidden items-center gap-1 md:flex">
                 <Button asChild variant="ghost" size="sm"><Link href="/profile"><UserCircle className="h-4 w-4" /> Profile</Link></Button>
-                <Button asChild variant="ghost" size="sm"><Link href="/dashboard"><LayoutDashboard className="h-4 w-4" /> Dashboard</Link></Button>
               </nav>
               <div className="flex items-center gap-2">
                 {session?.user ? (
