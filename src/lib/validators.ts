@@ -1,9 +1,24 @@
 import { z } from "zod";
 
+function normalizeOptionalWebUrl(value: unknown) {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "string") return value;
+
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  return `https://${trimmed}`;
+}
+
+const optionalWebUrl = z.preprocess(
+  normalizeOptionalWebUrl,
+  z.string().url().max(2048).nullable().optional()
+);
+
 export const hexPatchSchema = z.object({
   title: z.string().trim().max(80).optional(),
   message: z.string().max(240).optional(),
-  externalLink: z.string().url().nullable().optional()
+  externalLink: optionalWebUrl
 });
 
 export const checkoutSchema = z.object({
@@ -17,7 +32,7 @@ export const checkoutSchema = z.object({
       return false;
     }
   }, "Uploaded image must come from Vercel Blob.").optional(),
-  externalLink: z.string().url().optional()
+  externalLink: optionalWebUrl
 });
 
 export const profileSchema = z.object({

@@ -63,7 +63,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (!parsed.success) {
       const details = parsed.error.flatten();
       console.warn("[hex-details] Validation failed", { identifier: id, details });
-      return NextResponse.json({ error: "Hex details are invalid.", details }, { status: 400 });
+      return NextResponse.json({
+        error: "Hex details are invalid.",
+        details,
+        issues: parsed.error.issues.map((issue) => ({ path: issue.path.join("."), message: issue.message }))
+      }, { status: 400 });
     }
 
     const hex = await prisma.hex.findUnique({
