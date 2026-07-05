@@ -146,12 +146,17 @@ function sameCoordinate(a: LngLat, b: LngLat) {
   return a[0] === b[0] && a[1] === b[1];
 }
 
+function crossesAntimeridian(ring: LngLat[]) {
+  return ring.slice(1).some((coordinate, index) => Math.abs(coordinate[0] - ring[index][0]) > 180);
+}
+
 function isLinearRing(value: unknown): value is [number, number][] {
   return (
     Array.isArray(value) &&
     value.length >= 4 &&
     value.every(isLngLatPair) &&
-    sameCoordinate(value[0], value[value.length - 1])
+    sameCoordinate(value[0], value[value.length - 1]) &&
+    !crossesAntimeridian(value)
   );
 }
 
@@ -346,7 +351,16 @@ export async function GET(request: Request) {
       console.log("/api/hexes center fallback cell count", outputCells.length);
     }
 
-    const visibleCells = outputCells.slice(0, take);
+    const candidateCells = outputCells.slice(0, take);
+    const visibleCells = candidateCells.filter((cell) => {
+      const ring = cellToBoundary(cell).map(([lat, lng]) => [lng, lat] as LngLat);
+      ring.push(ring[0]);
+      return !crossesAntimeridian(ring);
+    });
+    const removedAntimeridianCells = candidateCells.length - visibleCells.length;
+    if (removedAntimeridianCells > 0) {
+      console.info("/api/hexes removed antimeridian-crossing cells", removedAntimeridianCells);
+    }
     let persistedHexes: PersistedHex[] = [];
     if (!isDemoMode) try {
       persistedHexes = (await prisma.hex.findMany({

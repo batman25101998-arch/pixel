@@ -85,12 +85,17 @@ function isLngLatCoordinate(value: unknown): value is [number, number] {
   );
 }
 
+function ringCrossesAntimeridian(ring: [number, number][]) {
+  return ring.slice(1).some((coordinate, index) => Math.abs(coordinate[0] - ring[index][0]) > 180);
+}
+
 function isLinearRing(value: unknown): value is [number, number][] {
   return (
     Array.isArray(value) &&
     value.length >= 4 &&
     value.every(isLngLatCoordinate) &&
-    JSON.stringify(value[0]) === JSON.stringify(value[value.length - 1])
+    JSON.stringify(value[0]) === JSON.stringify(value[value.length - 1]) &&
+    !ringCrossesAntimeridian(value)
   );
 }
 
@@ -340,9 +345,10 @@ function clearCustomImageCanvas(canvas: HTMLCanvasElement | null) {
   if (canvas && context) context.clearRect(0, 0, canvas.width, canvas.height);
 }
 
-function polygonFeatureForCell(h3Index: string): GeoJSON.Feature<GeoJSON.Polygon> {
+function polygonFeatureForCell(h3Index: string): GeoJSON.Feature<GeoJSON.Polygon> | null {
   const ring = cellToBoundary(h3Index).map(([lat, lng]) => [lng, lat] as [number, number]);
   ring.push(ring[0]);
+  if (ringCrossesAntimeridian(ring)) return null;
   return {
     type: "Feature",
     properties: { h3Index },
@@ -401,7 +407,10 @@ async function renderCustomImageCanvas(
   context.clearRect(0, 0, width, height);
   for (const item of drawable) {
     if (!item) continue;
-    const points = cellToBoundary(item.h3Index).map(([lat, lng]) => map.project([lng, lat]));
+    const boundary = cellToBoundary(item.h3Index).map(([lat, lng]) => [lng, lat] as [number, number]);
+    const closedBoundary = [...boundary, boundary[0]];
+    if (ringCrossesAntimeridian(closedBoundary)) continue;
+    const points = boundary.map(([lng, lat]) => map.project([lng, lat]));
     if (points.length < 3) continue;
     const xs = points.map((point) => point.x);
     const ys = points.map((point) => point.y);
@@ -493,7 +502,9 @@ export function EarthMap() {
       if (dashboardPulseInterval !== null) window.clearInterval(dashboardPulseInterval);
       const focusSource = map.getSource(dashboardFocusSourceId) as maplibregl.GeoJSONSource | undefined;
       if (!focusSource) return;
-      focusSource.setData({ type: "FeatureCollection", features: [polygonFeatureForCell(h3Index)] });
+      const focusFeature = polygonFeatureForCell(h3Index);
+      if (!focusFeature) return;
+      focusSource.setData({ type: "FeatureCollection", features: [focusFeature] });
       if (customImageCanvasRef.current) customImageCanvasRef.current.style.opacity = "0.35";
       let bright = true;
       dashboardPulseInterval = window.setInterval(() => {
@@ -696,6 +707,23 @@ export function EarthMap() {
           "line-opacity": 1,
           "line-width": 3
         }
+      });
+
+      console.info("[map-debug] MapLibre layers", map.getStyle().layers?.map((layer) => ({
+        id: layer.id,
+        type: layer.type,
+        source: "source" in layer ? layer.source : null,
+        category: layer.id.startsWith("earth-hex")
+          ? "hex-overlay"
+          : layer.id === "pixel-world-ocean"
+            ? "base-ocean"
+            : "base-map"
+      })));
+      console.info("[map-debug] DOM overlays", {
+        customImageCanvas: Boolean(customImageCanvasRef.current),
+        cssGridBackground: false,
+        userImagesEnabled: layerVisibilityRef.current.images,
+        hexGridEnabled: layerVisibilityRef.current.hexGrid
       });
 
       applyLayerVisibility(map, layerVisibilityRef.current);
