@@ -92,6 +92,7 @@ export function PurchasePanel() {
   const purchaseImageInputRef = useRef<HTMLInputElement | null>(null);
   const [purchaseImage, setPurchaseImage] = useState<File | null>(null);
   const [purchaseImagePreview, setPurchaseImagePreview] = useState<string | null>(null);
+  const [confirmPurchase, setConfirmPurchase] = useState(false);
 
   const purchased = selectedHex?.purchased;
   const status = purchased?.status ?? "AVAILABLE";
@@ -116,6 +117,7 @@ export function PurchasePanel() {
     setPurchaseStep(null);
     setPurchaseImage(null);
     setPurchaseImagePreview(null);
+    setConfirmPurchase(false);
     if (purchaseImageInputRef.current) purchaseImageInputRef.current.value = "";
     const saved = isClientDemoMode ? getDemoOwnedHexes().find((hex) => hex.h3Index === selectedHex.h3Index) : null;
     setTitle(saved?.title ?? selectedHex.purchased?.title ?? "");
@@ -129,6 +131,15 @@ export function PurchasePanel() {
       if (purchaseImagePreview) URL.revokeObjectURL(purchaseImagePreview);
     };
   }, [purchaseImagePreview]);
+
+  useEffect(() => {
+    if (!confirmPurchase) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setConfirmPurchase(false);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [confirmPurchase]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -396,6 +407,7 @@ export function PurchasePanel() {
   }
 
   function closePanel() {
+    setConfirmPurchase(false);
     setSelectedHex(null);
     setCertificate(null);
     setCheckoutStatus(null);
@@ -544,7 +556,7 @@ export function PurchasePanel() {
               <p className="text-sm text-muted-foreground">This collectible belongs permanently to its owner.</p>
             ) : (
               <div className="sticky bottom-[-1.25rem] z-10 -mx-5 -mb-5 border-t border-border bg-[#0b1117] p-4 pb-[max(1rem,env(safe-area-inset-bottom))] md:static md:m-0 md:border-0 md:bg-transparent md:p-0">
-                <Button className="h-12 w-full md:h-10" onClick={checkout} disabled={busy}>
+                <Button className="h-12 w-full md:h-10" onClick={() => setConfirmPurchase(true)} disabled={busy}>
                   {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShoppingCart className="h-4 w-4" />}
                   {busy ? purchaseStep ?? "Creating your hex..." : "Buy this Hex - $1"}
                 </Button>
@@ -553,6 +565,42 @@ export function PurchasePanel() {
           </div>
         ) : null}
       </div>
+
+      {confirmPurchase ? (
+        <div
+          className="fixed inset-0 z-50 flex items-end bg-black/70 md:items-center md:justify-center md:p-4"
+          onClick={() => setConfirmPurchase(false)}
+          onTouchStart={(event) => event.stopPropagation()}
+        >
+          <div
+            aria-describedby="purchase-confirmation-description"
+            aria-labelledby="purchase-confirmation-title"
+            aria-modal="true"
+            className="w-full rounded-t-xl border border-b-0 border-border bg-[#0b1117] p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl md:max-w-md md:rounded-lg md:border-b md:p-6"
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+          >
+            <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-slate-500/70 md:hidden" aria-hidden="true" />
+            <h2 id="purchase-confirmation-title" className="text-xl font-semibold">Confirm purchase</h2>
+            <p id="purchase-confirmation-description" className="mt-3 text-sm leading-6 text-muted-foreground">
+              You are purchasing this hex permanently for $1. This purchase cannot be undone.
+            </p>
+            <div className="mt-6 grid grid-cols-2 gap-3">
+              <Button type="button" variant="outline" className="h-11" onClick={() => setConfirmPurchase(false)}>Cancel</Button>
+              <Button
+                type="button"
+                className="h-11"
+                onClick={() => {
+                  setConfirmPurchase(false);
+                  void checkout();
+                }}
+              >
+                Continue to payment
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
