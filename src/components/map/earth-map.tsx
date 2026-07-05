@@ -496,6 +496,7 @@ export function EarthMap() {
     let dashboardPulseTimer: number | null = null;
     let dashboardPulseInterval: number | null = null;
     let interactionHintTimer: number | null = null;
+    let ctaReadyTimer: number | null = null;
 
     function pulseHex(h3Index: string) {
       if (dashboardPulseTimer !== null) window.clearTimeout(dashboardPulseTimer);
@@ -549,12 +550,26 @@ export function EarthMap() {
     const focusForFirstPurchase = () => {
       setSelectedHex(null);
       map.resize();
-      map.easeTo({
-        center: map.getCenter(),
-        zoom: Math.max(map.getZoom(), 3.5),
-        duration: 900,
+      const currentCenter = map.getCenter();
+      const center = Number.isFinite(currentCenter.lng) && Number.isFinite(currentCenter.lat)
+        ? currentCenter
+        : { lng: 15, lat: 45 };
+      let notified = false;
+      const notifyReady = () => {
+        if (notified) return;
+        notified = true;
+        map.off("moveend", notifyReady);
+        if (ctaReadyTimer !== null) window.clearTimeout(ctaReadyTimer);
+        window.dispatchEvent(new CustomEvent("pixel-earth:claim-first-hex-ready"));
+      };
+      map.once("moveend", notifyReady);
+      map.flyTo({
+        center,
+        zoom: Math.max(map.getZoom(), HEX_INTERACTION_ZOOM),
+        duration: 1100,
         essential: true
       });
+      ctaReadyTimer = window.setTimeout(notifyReady, 1300);
       map.getCanvas().focus({ preventScroll: true });
     };
     window.addEventListener("pixel-earth:claim-first-hex", focusForFirstPurchase);
@@ -852,6 +867,7 @@ export function EarthMap() {
       if (dashboardPulseTimer !== null) window.clearTimeout(dashboardPulseTimer);
       if (dashboardPulseInterval !== null) window.clearInterval(dashboardPulseInterval);
       if (interactionHintTimer !== null) window.clearTimeout(interactionHintTimer);
+      if (ctaReadyTimer !== null) window.clearTimeout(ctaReadyTimer);
       if (customImageCanvasRef.current) customImageCanvasRef.current.style.opacity = "1";
       imageDrawRef.current += 1;
       clearCustomImageCanvas(customImageCanvasRef.current);
