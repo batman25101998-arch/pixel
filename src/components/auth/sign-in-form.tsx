@@ -18,6 +18,7 @@ type BusyProvider = "google" | "credentials" | null;
 
 export function SignInForm({ googleEnabled, callbackUrl }: SignInFormProps) {
   const router = useRouter();
+  const destination = callbackUrl || "/";
   const [busyProvider, setBusyProvider] = useState<BusyProvider>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -27,19 +28,7 @@ export function SignInForm({ googleEnabled, callbackUrl }: SignInFormProps) {
     setBusyProvider("google");
     setError(null);
     try {
-      const canonicalOrigin = process.env.NEXT_PUBLIC_APP_URL
-        ? new URL(process.env.NEXT_PUBLIC_APP_URL).origin
-        : window.location.origin;
-
-      if (window.location.origin !== canonicalOrigin) {
-        const canonicalSignInUrl = new URL("/sign-in", canonicalOrigin);
-        canonicalSignInUrl.searchParams.set("callbackUrl", callbackUrl);
-        window.location.assign(canonicalSignInUrl.toString());
-        return;
-      }
-
-      const currentOriginCallbackUrl = new URL(callbackUrl, window.location.origin).toString();
-      await signIn("google", { callbackUrl: currentOriginCallbackUrl });
+      await signIn("google", { callbackUrl: destination });
     } catch {
       setBusyProvider(null);
       setError("Google sign-in could not be started.");
@@ -55,14 +44,14 @@ export function SignInForm({ googleEnabled, callbackUrl }: SignInFormProps) {
       const result = await signIn("credentials", {
         email: email.trim(),
         password,
-        callbackUrl,
+        callbackUrl: destination,
         redirect: false
       });
       if (result?.error) {
         setError("Email or password is incorrect.");
         return;
       }
-      router.push(callbackUrl);
+      router.replace(result?.url || destination);
       router.refresh();
     } catch {
       setError("Sign-in could not be completed.");
@@ -100,7 +89,7 @@ export function SignInForm({ googleEnabled, callbackUrl }: SignInFormProps) {
 
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
         <p className="text-center text-sm text-muted-foreground">
-          Don&apos;t have an account? <Link className="font-medium text-primary hover:underline" href={`/register?callbackUrl=${encodeURIComponent(callbackUrl)}`}>Register</Link>
+          Don&apos;t have an account? <Link className="font-medium text-primary hover:underline" href={`/register?callbackUrl=${encodeURIComponent(destination)}`}>Register</Link>
         </p>
       </CardContent>
     </Card>

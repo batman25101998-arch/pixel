@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { googleAuthConfigured } from "@/auth";
+import { auth, googleAuthConfigured } from "@/auth";
 import { SignInForm } from "@/components/auth/sign-in-form";
 import { isDemoMode } from "@/lib/env";
 
@@ -8,12 +8,15 @@ type SignInPageProps = {
 };
 
 export default async function SignInPage({ searchParams }: SignInPageProps) {
-  if (isDemoMode) redirect("/dashboard");
+  if (isDemoMode) redirect("/");
 
   const params = await searchParams;
   const callbackUrl = params.callbackUrl?.startsWith("/") && !params.callbackUrl.startsWith("//")
     ? params.callbackUrl
-    : "/dashboard";
+    : "/";
+
+  const session = await auth();
+  if (session?.user) redirect(callbackUrl);
 
   return (
     <div className="flex min-h-[calc(100vh-86px)] items-center justify-center px-4 py-10">

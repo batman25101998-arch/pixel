@@ -151,6 +151,18 @@ const nextAuth = NextAuth({
     })
   ],
   callbacks: {
+    async redirect({ url, baseUrl }) {
+      if (url.startsWith("/") && !url.startsWith("//")) return `${baseUrl}${url}`;
+
+      try {
+        const destination = new URL(url);
+        if (destination.origin === new URL(baseUrl).origin) return destination.toString();
+      } catch {
+        // Invalid callback URLs always fall back to the world map.
+      }
+
+      return baseUrl;
+    },
     async signIn({ user }) {
       if (isDemoMode) return true;
       if (!user.id) return true;

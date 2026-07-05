@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 
 export function RegisterForm({ callbackUrl }: { callbackUrl: string }) {
   const router = useRouter();
+  const destination = callbackUrl || "/";
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -35,12 +36,12 @@ export function RegisterForm({ callbackUrl }: { callbackUrl: string }) {
         return;
       }
 
-      const result = await signIn("credentials", { email, password, callbackUrl, redirect: false });
+      const result = await signIn("credentials", { email, password, callbackUrl: destination, redirect: false });
       if (result?.error) {
         setError("Account created, but automatic sign-in failed. Please sign in.");
         return;
       }
-      router.push(callbackUrl);
+      router.replace(result?.url || destination);
       router.refresh();
     } catch {
       setError("Account could not be created.");
@@ -60,7 +61,7 @@ export function RegisterForm({ callbackUrl }: { callbackUrl: string }) {
           {error ? <p className="text-sm text-destructive">{error}</p> : null}
           <Button className="w-full" disabled={busy}>{busy ? "Creating account..." : "Create account"}</Button>
         </form>
-        <p className="mt-4 text-center text-sm text-muted-foreground">Already have an account? <Link className="font-medium text-primary hover:underline" href={`/sign-in?callbackUrl=${encodeURIComponent(callbackUrl)}`}>Sign in</Link></p>
+        <p className="mt-4 text-center text-sm text-muted-foreground">Already have an account? <Link className="font-medium text-primary hover:underline" href={`/sign-in?callbackUrl=${encodeURIComponent(destination)}`}>Sign in</Link></p>
       </CardContent>
     </Card>
   );
