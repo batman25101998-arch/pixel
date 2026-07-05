@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { RegisterForm } from "@/components/auth/register-form";
+import { safeAuthCallbackUrl } from "@/lib/auth-callback";
 import { isDemoMode } from "@/lib/env";
 
 type RegisterPageProps = { searchParams: Promise<{ callbackUrl?: string }> };
@@ -7,9 +8,7 @@ type RegisterPageProps = { searchParams: Promise<{ callbackUrl?: string }> };
 export default async function RegisterPage({ searchParams }: RegisterPageProps) {
   if (isDemoMode) redirect("/");
   const params = await searchParams;
-  const callbackUrl = params.callbackUrl?.startsWith("/") && !params.callbackUrl.startsWith("//")
-    ? params.callbackUrl
-    : "/";
+  const callbackUrl = safeAuthCallbackUrl(params.callbackUrl);
 
   return (
     <div className="flex min-h-[calc(100vh-86px)] items-center justify-center px-4 py-10">

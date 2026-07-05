@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { safeAuthCallbackUrl } from "@/lib/auth-callback";
 
 type SignInFormProps = {
   googleEnabled: boolean;
@@ -18,7 +19,7 @@ type BusyProvider = "google" | "credentials" | null;
 
 export function SignInForm({ googleEnabled, callbackUrl }: SignInFormProps) {
   const router = useRouter();
-  const destination = callbackUrl || "/";
+  const destination = safeAuthCallbackUrl(callbackUrl);
   const [busyProvider, setBusyProvider] = useState<BusyProvider>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -51,7 +52,7 @@ export function SignInForm({ googleEnabled, callbackUrl }: SignInFormProps) {
         setError("Email or password is incorrect.");
         return;
       }
-      router.replace(result?.url || destination);
+      router.replace(destination);
       router.refresh();
     } catch {
       setError("Sign-in could not be completed.");

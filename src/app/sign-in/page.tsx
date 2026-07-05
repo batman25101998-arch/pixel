@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth, googleAuthConfigured } from "@/auth";
 import { SignInForm } from "@/components/auth/sign-in-form";
+import { safeAuthCallbackUrl } from "@/lib/auth-callback";
 import { isDemoMode } from "@/lib/env";
 
 type SignInPageProps = {
@@ -11,9 +12,7 @@ export default async function SignInPage({ searchParams }: SignInPageProps) {
   if (isDemoMode) redirect("/");
 
   const params = await searchParams;
-  const callbackUrl = params.callbackUrl?.startsWith("/") && !params.callbackUrl.startsWith("//")
-    ? params.callbackUrl
-    : "/";
+  const callbackUrl = safeAuthCallbackUrl(params.callbackUrl);
 
   const session = await auth();
   if (session?.user) redirect(callbackUrl);

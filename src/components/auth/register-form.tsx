@@ -8,10 +8,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { safeAuthCallbackUrl } from "@/lib/auth-callback";
 
 export function RegisterForm({ callbackUrl }: { callbackUrl: string }) {
   const router = useRouter();
-  const destination = callbackUrl || "/";
+  const destination = safeAuthCallbackUrl(callbackUrl);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -41,7 +42,7 @@ export function RegisterForm({ callbackUrl }: { callbackUrl: string }) {
         setError("Account created, but automatic sign-in failed. Please sign in.");
         return;
       }
-      router.replace(result?.url || destination);
+      router.replace(destination);
       router.refresh();
     } catch {
       setError("Account could not be created.");
