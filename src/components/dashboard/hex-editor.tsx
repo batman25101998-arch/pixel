@@ -4,6 +4,7 @@ import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { Edit3, Eye, Loader2, Save, X } from "lucide-react";
 import { HexImageUpload } from "@/components/hex-image-upload";
+import { apiErrorMessage } from "@/lib/api-error";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -47,8 +48,8 @@ export function HexEditor({ hex }: { hex: Hex }) {
           externalLink: String(form.get("externalLink") || "") || null
         })
       });
-      const data = (await response.json()) as { error?: string };
-      if (!response.ok) throw new Error(typeof data.error === "string" ? data.error : "Could not save changes.");
+      const data = response.headers.get("content-type")?.includes("application/json") ? await response.json() : null;
+      if (!response.ok) throw new Error(apiErrorMessage(data, `Could not save changes (${response.status}).`));
       setStatus("Saved");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Could not save changes.");

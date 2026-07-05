@@ -50,33 +50,64 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
 
   const { id } = await params;
-  const parsed = hexPatchSchema.safeParse(await request.json());
-  if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
-
-  const hex = await prisma.hex.findUnique({ where: { id }, select: { ownerId: true, status: true } });
-  if (!hex) return NextResponse.json({ error: "Hex not found." }, { status: 404 });
-  if (hex.ownerId !== session.user.id && session.user.role !== "ADMIN") {
-    return NextResponse.json({ error: "Forbidden." }, { status: 403 });
-  }
-
-  const updated = await prisma.$transaction(async (tx) => {
-    const { externalLink, ...hexData } = parsed.data;
-    const saved = await tx.hex.update({
-      where: { id },
-      data: { ...hexData, link: externalLink },
-      include: { owner: { select: { id: true, username: true, displayName: true, avatarUrl: true, founderNumber: true, kingdomUnlockedAt: true } } }
+  try {
+    const body = await request.json();
+    console.info("[hex-details] Update requested", {
+      identifier: id,
+      userId: session.user.id,
+      fields: body && typeof body === "object" ? Object.keys(body) : [],
+      imageUrl: body && typeof body === "object" && "imageUrl" in body ? body.imageUrl : undefined,
+      externalLink: body && typeof body === "object" && "externalLink" in body ? body.externalLink : undefined
     });
 
-    return saved;
-  });
-
-  return NextResponse.json({
-    hex: {
-      ...updated,
-      priceCents: Number(updated.priceCents),
-      purchaseDate: updated.purchaseDate.toISOString(),
-      createdAt: updated.createdAt.toISOString(),
-      updatedAt: updated.updatedAt.toISOString()
+    const parsed = hexPatchSchema.safeParse(body);
+    if (!parsed.success) {
+      const details = parsed.error.flatten();
+      console.warn("[hex-details] Validation failed", { identifier: id, details });
+      return NextResponse.json({ error: "Hex details are invalid.", details }, { status: 400 });
     }
-  });
+
+    const hex = await prisma.hex.findUnique({
+      where: isValidCell(id) ? { h3Index: id } : { id },
+      select: { id: true, h3Index: true, ownerId: true }
+    });
+    if (!hex) return NextResponse.json({ error: "Hex not found." }, { status: 404 });
+    if (hex.ownerId !== session.user.id) {
+      console.warn("[hex-details] Ownership check failed", { hexId: hex.id, ownerId: hex.ownerId, userId: session.user.id });
+      return NextResponse.json({ error: "Only the hex owner can edit these details." }, { status: 403 });
+    }
+
+    const updated = await prisma.hex.update({
+      where: { id: hex.id },
+      data: {
+        title: parsed.data.title,
+        message: parsed.data.message,
+        avatarUrl: parsed.data.avatarUrl,
+        imageUrl: parsed.data.imageUrl,
+        link: parsed.data.externalLink
+      },
+      include: { owner: { select: { id: true, username: true, displayName: true, avatarUrl: true, founderNumber: true, kingdomUnlockedAt: true } } }
+    });
+    console.info("[hex-details] Update saved", {
+      hexId: updated.id,
+      h3Index: updated.h3Index,
+      imageUrl: updated.imageUrl,
+      link: updated.link
+    });
+
+    return NextResponse.json({
+      hex: {
+        ...updated,
+        priceCents: Number(updated.priceCents),
+        purchaseDate: updated.purchaseDate.toISOString(),
+        createdAt: updated.createdAt.toISOString(),
+        updatedAt: updated.updatedAt.toISOString(),
+        externalLink: updated.link
+      }
+    });
+  } catch (error) {
+    console.error("[hex-details] Update failed", { identifier: id, userId: session.user.id, error });
+    const details = error instanceof Error ? error.message : "Unknown database error.";
+    return NextResponse.json({ error: "Hex details could not be saved.", details }, { status: 500 });
+  }
 }

@@ -13,6 +13,7 @@ import { money } from "@/lib/utils";
 import { DEMO_USER, isClientDemoMode } from "@/lib/demo";
 import { buyDemoHex, getDemoOwnedHexes, updateDemoHexMetadata } from "@/lib/demo-storage";
 import { redirectToSignIn } from "@/lib/client-auth";
+import { apiErrorMessage } from "@/lib/api-error";
 import { useMapStore } from "@/stores/map-store";
 
 type Certificate = {
@@ -349,9 +350,9 @@ export function PurchasePanel() {
             externalLink: externalLink || null
           })
         });
-        const data = await response.json();
+        const data = response.headers.get("content-type")?.includes("application/json") ? await response.json() : null;
         if (!response.ok) {
-          throw new Error(typeof data.error === "string" ? data.error : "Hex details could not be saved.");
+          throw new Error(apiErrorMessage(data, `Hex details could not be saved (${response.status}).`));
         }
       }
 
