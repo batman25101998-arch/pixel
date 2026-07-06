@@ -4,8 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "dev:grant-zagreb": "node scripts/dev-grant-zagreb-hexes.mjs",
-    "grant:kingdom": "tsx scripts/grant-kingdom-test.ts",
+    "reset:production-data": "tsx scripts/reset-production-data.ts",
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "next lint",
