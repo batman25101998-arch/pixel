@@ -125,7 +125,8 @@ export function PurchasePanel() {
     setConfirmPurchase(false);
     if (purchaseImageInputRef.current) purchaseImageInputRef.current.value = "";
 
-    const pendingDraft = getPendingHexPurchase();
+    const resumeRequested = new URLSearchParams(window.location.search).get("resumePurchase") === "1";
+    const pendingDraft = resumeRequested ? getPendingHexPurchase() : null;
     if (pendingDraft?.h3Index === selectedHex.h3Index && !selectedHex.purchased) {
       setTitle(pendingDraft.title);
       setMessage(pendingDraft.message);
@@ -133,7 +134,7 @@ export function PurchasePanel() {
       setExternalLink(pendingDraft.externalLink);
       setError(pendingDraft.uploadWarning ?? null);
       setConfirmPurchase(true);
-      console.info("[pending-purchase] restored pending purchase", { h3Index: pendingDraft.h3Index });
+      console.log("[purchase-resume] draft restored on map", pendingDraft);
       return;
     }
 
@@ -271,7 +272,7 @@ export function PurchasePanel() {
         createdAt: new Date().toISOString(),
         uploadWarning
       });
-      redirectToSignIn("/");
+      redirectToSignIn("/purchase/resume");
       return;
     }
 
@@ -312,7 +313,6 @@ export function PurchasePanel() {
         purchaseDate
       };
       setCertificate(demoCertificate);
-      clearPendingHexPurchase();
       setSelectedHex({
         h3Index: selectedHex.h3Index,
         lng: selectedHex.lng,
@@ -475,13 +475,8 @@ export function PurchasePanel() {
     setError(null);
   }
 
-  function closePurchaseConfirmation(discardDraft = false) {
+  function closePurchaseConfirmation() {
     setConfirmPurchase(false);
-    if (!discardDraft || !selectedHex) return;
-    const pendingDraft = getPendingHexPurchase();
-    if (pendingDraft?.h3Index === selectedHex.h3Index) {
-      clearPendingHexPurchase("user canceled draft");
-    }
   }
 
   return (
@@ -656,7 +651,7 @@ export function PurchasePanel() {
             </p>
             {error ? <p className="mt-3 text-sm text-amber-300">{error}</p> : null}
             <div className="mt-6 grid grid-cols-2 gap-3">
-              <Button type="button" variant="outline" className="h-11" onClick={() => closePurchaseConfirmation(true)}>Cancel</Button>
+              <Button type="button" variant="outline" className="h-11" onClick={closePurchaseConfirmation}>Cancel</Button>
               <Button
                 type="button"
                 className="h-11"

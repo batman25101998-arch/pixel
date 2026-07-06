@@ -15,12 +15,12 @@ export type PendingHexPurchase = {
 
 export function savePendingHexPurchase(draft: PendingHexPurchase) {
   window.localStorage.setItem(PENDING_HEX_PURCHASE_KEY, JSON.stringify(draft));
-  console.info("[pending-purchase] saved pending purchase", { h3Index: draft.h3Index, createdAt: draft.createdAt });
+  console.log("[purchase-resume] draft saved", draft);
 }
 
 export function clearPendingHexPurchase(reason = "completed") {
   window.localStorage.removeItem(PENDING_HEX_PURCHASE_KEY);
-  console.info("[pending-purchase] cleared pending purchase", { reason });
+  console.log("[purchase-resume] cleared pending purchase", { reason });
 }
 
 export function getPendingHexPurchase(): PendingHexPurchase | null {

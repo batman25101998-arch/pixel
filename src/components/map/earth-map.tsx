@@ -747,9 +747,16 @@ export function EarthMap() {
       void loadHexes();
       void loadCustomImages();
 
-      const pendingPurchase = getPendingHexPurchase();
-      const requestedHex = new URLSearchParams(window.location.search).get("hex");
-      const pendingHex = pendingPurchase && isValidCell(pendingPurchase.h3Index) ? pendingPurchase : null;
+      const urlParams = new URLSearchParams(window.location.search);
+      const resumeRequested = urlParams.get("resumePurchase") === "1";
+      const resumeH3Index = urlParams.get("h3Index");
+      const pendingPurchase = resumeRequested ? getPendingHexPurchase() : null;
+      const requestedHex = urlParams.get("hex");
+      const pendingHex = pendingPurchase &&
+        isValidCell(pendingPurchase.h3Index) &&
+        (!resumeH3Index || resumeH3Index === pendingPurchase.h3Index)
+        ? pendingPurchase
+        : null;
       const targetHex = pendingHex?.h3Index ?? (requestedHex && isValidCell(requestedHex) ? requestedHex : null);
       if (targetHex) {
         const [cellLat, cellLng] = cellToLatLng(targetHex);
@@ -759,7 +766,7 @@ export function EarthMap() {
           lat: pendingHex?.lat ?? cellLat
         };
         if (pendingHex) {
-          console.info("[pending-purchase] found pending purchase after login", { h3Index: pendingHex.h3Index });
+          console.log("[purchase-resume] draft restored on map", pendingHex);
         }
         setSelectedHex(selection);
         map.once("moveend", () => {
