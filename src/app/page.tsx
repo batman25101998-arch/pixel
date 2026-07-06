@@ -2,6 +2,7 @@ import { EarthMap } from "@/components/map/earth-map";
 import { HeroCta } from "@/components/hero-cta";
 import { PurchasePanel } from "@/components/map/purchase-panel";
 import { SearchBar } from "@/components/map/search-bar";
+import { WelcomeModal } from "@/components/welcome-modal";
 
 export default function HomePage() {
   return (
@@ -22,6 +23,7 @@ export default function HomePage() {
         <SearchBar />
         <PurchasePanel />
       </section>
+      <WelcomeModal />
     </main>
   );
 }
