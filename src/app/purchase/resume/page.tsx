@@ -13,7 +13,7 @@ export default function ResumePurchasePage() {
 
   useEffect(() => {
     if (!loggedOpen.current) {
-      console.log("[purchase-resume] resume page opened");
+      console.log("[purchase-resume] purchase resume loaded");
       loggedOpen.current = true;
     }
 
@@ -25,10 +25,12 @@ export default function ResumePurchasePage() {
 
     const draft = getPendingHexPurchase();
     if (!draft) {
+      console.log("[purchase-resume] pending draft missing");
       router.replace("/");
       return;
     }
 
+    console.log("[purchase-resume] pending draft found", draft);
     router.replace(`/?resumePurchase=1&h3Index=${encodeURIComponent(draft.h3Index)}`);
   }, [router, status]);
 

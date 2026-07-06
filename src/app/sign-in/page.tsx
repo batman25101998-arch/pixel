@@ -13,6 +13,7 @@ export default async function SignInPage({ searchParams }: SignInPageProps) {
 
   const params = await searchParams;
   const callbackUrl = safeAuthCallbackUrl(params.callbackUrl);
+  console.log("[auth] sign-in callbackUrl", callbackUrl);
 
   return (
     <div className="flex min-h-[calc(100vh-86px)] items-center justify-center px-4 py-10">

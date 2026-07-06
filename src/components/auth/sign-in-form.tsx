@@ -36,7 +36,20 @@ export function SignInForm({ googleEnabled, callbackUrl }: SignInFormProps) {
     setBusyProvider("google");
     setError(null);
     try {
-      await signIn("google", { callbackUrl: destination });
+      const canonicalOrigin = process.env.NEXT_PUBLIC_APP_URL
+        ? new URL(process.env.NEXT_PUBLIC_APP_URL).origin
+        : window.location.origin;
+
+      if (window.location.origin !== canonicalOrigin) {
+        const canonicalSignInUrl = new URL("/sign-in", canonicalOrigin);
+        if (destination !== "/") canonicalSignInUrl.searchParams.set("callbackUrl", destination);
+        window.location.assign(canonicalSignInUrl.toString());
+        return;
+      }
+
+      const callbackUrl = new URL(destination, canonicalOrigin).toString();
+      console.log("[auth] Google signIn callbackUrl", callbackUrl);
+      await signIn("google", { callbackUrl });
     } catch {
       setBusyProvider(null);
       setError("Google sign-in could not be started.");
