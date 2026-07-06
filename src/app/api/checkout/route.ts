@@ -18,7 +18,7 @@ export async function POST(request: Request) {
   assertCell(h3Index);
   if (getResolution(h3Index) !== 5) return NextResponse.json({ error: "Hex must use H3 resolution 5." }, { status: 400 });
   const existing = await prisma.hex.findUnique({ where: { h3Index }, select: { id: true } });
-  if (existing) return NextResponse.json({ error: "This hex is already owned." }, { status: 409 });
+  if (existing) return NextResponse.json({ error: "This hex is already claimed." }, { status: 409 });
 
   const paymentMetadata: Record<string, string> = {
     h3Index,

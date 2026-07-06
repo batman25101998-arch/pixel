@@ -250,22 +250,12 @@ async function loadPersistedSelection(selection: SelectedHex) {
   } satisfies SelectedHex;
 }
 
-function hexFillColorExpression(currentUserId: string): ExpressionSpecification {
+function hexFillColorExpression(): ExpressionSpecification {
   return [
     "case",
-    ["==", ["get", "status"], "MY_OWNED"],
-    "#22c55e",
-    ["all", ["!=", ["get", "status"], "AVAILABLE"], ["==", ["get", "ownerId"], currentUserId]],
-    "#8b5cf6",
-    ["==", ["get", "status"], "SPECIAL"],
-    "#a855f7",
-    ["==", ["get", "status"], "FOR_SALE"],
-    "#fbbf24",
-    ["==", ["get", "status"], "GREEN_OWNED"],
-    "#16a34a",
-    ["==", ["get", "status"], "OWNED"],
-    "#2563eb",
-    "#0f172a"
+    ["==", ["get", "status"], "AVAILABLE"],
+    "#064e3b",
+    "#05080d"
   ] as ExpressionSpecification;
 }
 
@@ -273,10 +263,10 @@ function hexFillOpacityExpression(): ExpressionSpecification {
   return [
     "case",
     ["boolean", ["feature-state", "hover"], false],
-    ["case", ["==", ["get", "status"], "AVAILABLE"], 0.34, 0.86],
+    ["case", ["==", ["get", "status"], "AVAILABLE"], 0.3, 0.5],
     ["==", ["get", "status"], "AVAILABLE"],
-    0.22,
-    0.75
+    0.16,
+    0.38
   ] as ExpressionSpecification;
 }
 
@@ -286,14 +276,8 @@ function hexLineColorExpression(): ExpressionSpecification {
     ["boolean", ["feature-state", "hover"], false],
     "#f8fafc",
     ["==", ["get", "status"], "AVAILABLE"],
-    "#334155",
-    ["==", ["get", "status"], "FOR_SALE"],
-    "#fde68a",
-    ["==", ["get", "status"], "SPECIAL"],
-    "#d8b4fe",
-    ["==", ["get", "status"], "GREEN_OWNED"],
-    "#86efac",
-    "#93c5fd"
+    "#2dd4bf",
+    "#334155"
   ] as ExpressionSpecification;
 }
 
@@ -303,8 +287,8 @@ function hexLineOpacityExpression(): ExpressionSpecification {
     ["boolean", ["feature-state", "hover"], false],
     1,
     ["==", ["get", "status"], "AVAILABLE"],
-    0.8,
-    0.8
+    0.9,
+    0.4
   ] as ExpressionSpecification;
 }
 
@@ -686,7 +670,7 @@ export function EarthMap() {
         type: "fill",
         minzoom: 0,
         paint: {
-          "fill-color": hexFillColorExpression(currentUserId),
+          "fill-color": hexFillColorExpression(),
           "fill-opacity": hexFillOpacityExpression()
         }
       });
@@ -861,20 +845,22 @@ export function EarthMap() {
           status: baseStatus === "AVAILABLE" ? imageProperties.status ?? baseStatus : baseStatus,
           imageUrl: imageProperties.imageUrl ?? props.imageUrl ?? null
         };
-        const selection = selectedHexFromProperties(mergedProperties);
-        if (!openHexOrZoom(selection)) return;
+        let selection = selectedHexFromProperties(mergedProperties);
         if (!isClientDemoMode) {
-          void loadPersistedSelection(selection)
-            .then((persistedSelection) => {
-              if (useMapStore.getState().selectedHex?.h3Index === persistedSelection.h3Index) {
-                setSelectedHex(persistedSelection);
-              }
-            })
-            .catch((error) => console.error("Selected hex lookup failed", error));
+          try {
+            selection = await loadPersistedSelection(selection);
+          } catch (error) {
+            console.error("Selected hex lookup failed", error);
+            return;
+          }
         }
+        if (availableOnlyRef.current && selection.purchased) return;
+        openHexOrZoom(selection);
 
         return;
       }
+
+      if (availableOnlyRef.current) return;
 
       const response = await fetch("/api/hexes", {
         method: "POST",
@@ -882,7 +868,15 @@ export function EarthMap() {
         body: JSON.stringify({ lng: event.lngLat.lng, lat: event.lngLat.lat })
       });
       const data = await response.json();
-      const selection = { h3Index: data.h3Index, lng: event.lngLat.lng, lat: event.lngLat.lat };
+      let selection: SelectedHex = { h3Index: data.h3Index, lng: event.lngLat.lng, lat: event.lngLat.lat };
+      if (!isClientDemoMode) {
+        try {
+          selection = await loadPersistedSelection(selection);
+        } catch (error) {
+          console.error("Selected hex lookup failed", error);
+          return;
+        }
+      }
       openHexOrZoom(selection);
     });
 
@@ -928,7 +922,7 @@ export function EarthMap() {
   useEffect(() => {
     const map = mapRef.current;
     if (!map?.getLayer(fillLayerId)) return;
-    map.setPaintProperty(fillLayerId, "fill-color", hexFillColorExpression(currentUserId));
+    map.setPaintProperty(fillLayerId, "fill-color", hexFillColorExpression());
   }, [currentUserId]);
 
   useEffect(() => {
@@ -1031,15 +1025,21 @@ export function EarthMap() {
           Click again to view this hex.
         </div>
       ) : null}
-      <label className="absolute left-3 top-[4.5rem] z-20 flex h-9 cursor-pointer items-center gap-2 rounded-md border border-white/15 bg-[#071827] px-3 text-xs font-medium text-slate-100 shadow-xl md:left-4 md:top-[4.75rem]">
-        <input
-          type="checkbox"
-          checked={availableOnly}
-          onChange={(event) => setAvailableOnly(event.target.checked)}
-          className="h-4 w-4 accent-emerald-400"
-        />
-        <span>Show available hexes only</span>
-      </label>
+      <div className="absolute left-3 top-[4.5rem] z-20 rounded-md border border-white/15 bg-[#071827] p-2.5 text-xs text-slate-100 shadow-xl md:left-4 md:top-[4.75rem]">
+        <label className="flex cursor-pointer items-center gap-2 font-medium">
+          <input
+            type="checkbox"
+            checked={availableOnly}
+            onChange={(event) => setAvailableOnly(event.target.checked)}
+            className="h-4 w-4 accent-emerald-400"
+          />
+          <span>Show available hexes only</span>
+        </label>
+        <div className="mt-2 flex items-center gap-3 border-t border-white/10 pt-2 text-[11px] text-slate-300" aria-label="Hex status legend">
+          <span className="flex items-center gap-1.5"><span className="h-3 w-3 border border-teal-300 bg-emerald-900/70" />Available</span>
+          <span className="flex items-center gap-1.5"><span className="h-3 w-3 border border-slate-600 bg-[#05080d]" />Claimed</span>
+        </div>
+      </div>
       <button
         type="button"
         aria-label={layersOpen ? "Close map layers" : "Open map layers"}
@@ -1049,7 +1049,7 @@ export function EarthMap() {
       >
         {layersOpen ? <X className="h-4 w-4" /> : <SlidersHorizontal className="h-4 w-4" />}
       </button>
-      <div className={`${layersOpen ? "block" : "hidden"} absolute right-3 top-[7.25rem] z-20 w-44 rounded-md border border-white/15 bg-[#071827] p-2.5 shadow-xl md:right-4 md:top-4 md:block md:w-48`}>
+      <div className={`${layersOpen ? "block" : "hidden"} absolute right-3 top-[8.75rem] z-20 w-44 rounded-md border border-white/15 bg-[#071827] p-2.5 shadow-xl md:right-4 md:top-4 md:block md:w-48`}>
         <div className="mb-1.5 flex items-center gap-2 px-1 text-xs font-semibold uppercase text-slate-300"><Layers3 className="h-3.5 w-3.5" /> Map layers</div>
         {([
           ["images", "User Images"],
