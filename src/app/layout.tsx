@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import Link from "next/link";
 import { Earth, UserCircle } from "lucide-react";
 import { auth } from "@/auth";
@@ -9,9 +9,47 @@ import { DEMO_USER } from "@/lib/demo";
 import { isDemoMode } from "@/lib/env";
 import "./globals.css";
 
+const productionUrl = "https://pixel-weld-tau.vercel.app";
+const title = "Own a Hex of Earth | Claim Your Place on Earth Forever";
+const description = "Claim your own permanent hex on Earth for just $1. Add your photo, message and personal link. Make your mark and own a unique place on Earth for generations.";
+
 export const metadata: Metadata = {
-  title: "Own a Hex of Earth",
-  description: "Own and customize a permanent collectible hex on the world map."
+  metadataBase: new URL(productionUrl),
+  title,
+  description,
+  applicationName: "Own a Hex of Earth",
+  alternates: { canonical: "/" },
+  manifest: "/site.webmanifest",
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/favicon-32x32.png", type: "image/png", sizes: "32x32" },
+      { url: "/favicon-16x16.png", type: "image/png", sizes: "16x16" }
+    ],
+    shortcut: "/favicon.ico",
+    apple: [{ url: "/apple-touch-icon.png", type: "image/png", sizes: "180x180" }]
+  },
+  openGraph: {
+    type: "website",
+    locale: "en_US",
+    url: productionUrl,
+    siteName: "Own a Hex of Earth",
+    title: "Claim Your Place on Earth Forever",
+    description: "Own a permanent hex on Earth for just $1.",
+    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "Earth covered by collectible hexes" }]
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Claim Your Place on Earth Forever",
+    description: "Own a permanent hex on Earth for just $1.",
+    images: ["/og-image.png"]
+  },
+  robots: { index: true, follow: true }
+};
+
+export const viewport: Viewport = {
+  colorScheme: "dark",
+  themeColor: "#0b1020"
 };
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

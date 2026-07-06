@@ -1,0 +1,21 @@
+{
+  "name": "Own a Hex of Earth",
+  "short_name": "Earth Hex",
+  "description": "Claim a permanent hex on Earth for just $1.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0b1020",
+  "theme_color": "#0b1020",
+  "icons": [
+    {
+      "src": "/favicon-32x32.png",
+      "sizes": "32x32",
+      "type": "image/png"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ]
+}
