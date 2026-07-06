@@ -14,11 +14,6 @@ import { DEMO_USER, isClientDemoMode } from "@/lib/demo";
 import { buyDemoHex, getDemoOwnedHexes, updateDemoHexMetadata } from "@/lib/demo-storage";
 import { redirectToSignIn } from "@/lib/client-auth";
 import { apiErrorMessage } from "@/lib/api-error";
-import {
-  clearPendingHexPurchase,
-  getPendingHexPurchase,
-  savePendingHexPurchase
-} from "@/lib/pending-hex-purchase";
 import { useMapStore } from "@/stores/map-store";
 
 type Certificate = {
@@ -102,6 +97,7 @@ export function PurchasePanel() {
   const purchased = selectedHex?.purchased;
   const status = purchased?.status ?? "AVAILABLE";
   const isOwnHex = status === "MY_OWNED";
+  const canCustomize = isClientDemoMode || authenticationStatus === "authenticated";
   const price = purchased?.priceCents ?? 100;
   const coordinates = selectedHex ? coordinateLabel(selectedHex.lat, selectedHex.lng) : "";
   const previewImageUrl = purchased?.imageUrl || imageUrl || null;
@@ -124,19 +120,6 @@ export function PurchasePanel() {
     setPurchaseImagePreview(null);
     setConfirmPurchase(false);
     if (purchaseImageInputRef.current) purchaseImageInputRef.current.value = "";
-
-    const resumeRequested = new URLSearchParams(window.location.search).get("resumePurchase") === "1";
-    const pendingDraft = resumeRequested ? getPendingHexPurchase() : null;
-    if (pendingDraft?.h3Index === selectedHex.h3Index && !selectedHex.purchased) {
-      setTitle(pendingDraft.title);
-      setMessage(pendingDraft.message);
-      setImageUrl(pendingDraft.uploadedImageUrl ?? "");
-      setExternalLink(pendingDraft.externalLink);
-      setError(pendingDraft.uploadWarning ?? null);
-      setConfirmPurchase(true);
-      console.log("[purchase-resume] draft restored on map", pendingDraft);
-      return;
-    }
 
     const saved = isClientDemoMode ? getDemoOwnedHexes().find((hex) => hex.h3Index === selectedHex.h3Index) : null;
     setTitle(saved?.title ?? selectedHex.purchased?.title ?? "");
@@ -181,7 +164,6 @@ export function PurchasePanel() {
         if (cancelled) return;
         if (data.status === "SUCCEEDED" && data.certificate) {
           const confirmedCertificate = data.certificate;
-          clearPendingHexPurchase();
           setCertificate(confirmedCertificate);
           setSelectedHex({
             h3Index: confirmedCertificate.h3Index,
@@ -242,37 +224,9 @@ export function PurchasePanel() {
     setPurchaseStep(purchaseImage ? "Uploading image..." : "Creating your hex...");
 
     if (!isClientDemoMode && authenticationStatus !== "authenticated") {
-      let uploadedImageUrl = imageUrl || null;
-      let uploadWarning: string | undefined;
-
-      if (purchaseImage) {
-        const formData = new FormData();
-        formData.set("h3Index", selectedHex.h3Index);
-        formData.set("file", purchaseImage);
-        try {
-          const uploadResponse = await fetch("/api/upload/hex-image", { method: "POST", body: formData });
-          const uploadData = (await uploadResponse.json()) as { imageUrl?: string; error?: string };
-          if (!uploadResponse.ok || !uploadData.imageUrl) {
-            throw new Error(uploadData.error ?? "The selected image could not be uploaded before sign-in.");
-          }
-          uploadedImageUrl = uploadData.imageUrl;
-        } catch {
-          uploadWarning = "Your title, message, and link were restored, but the image could not be preserved. Please choose the image again before payment.";
-        }
-      }
-
-      savePendingHexPurchase({
-        h3Index: selectedHex.h3Index,
-        title,
-        message,
-        externalLink,
-        uploadedImageUrl,
-        lat: selectedHex.lat,
-        lng: selectedHex.lng,
-        createdAt: new Date().toISOString(),
-        uploadWarning
-      });
-      redirectToSignIn("/purchase/resume");
+      setBusy(false);
+      setPurchaseStep(null);
+      redirectToSignIn("/");
       return;
     }
 
@@ -355,18 +309,6 @@ export function PurchasePanel() {
         setError(uploadError instanceof Error ? uploadError.message : "Image could not be uploaded before checkout.");
         return;
       }
-    }
-
-    const pendingDraft = getPendingHexPurchase();
-    if (pendingDraft?.h3Index === selectedHex.h3Index) {
-      savePendingHexPurchase({
-        ...pendingDraft,
-        title,
-        message,
-        externalLink,
-        uploadedImageUrl: checkoutImageUrl ?? null,
-        uploadWarning: undefined
-      });
     }
 
     const response = await fetch("/api/checkout", {
@@ -591,7 +533,7 @@ export function PurchasePanel() {
                   </div>
                 ) : null}
               </div>
-            ) : (
+            ) : canCustomize ? (
               <div className="space-y-3">
                 <div className="space-y-1.5"><Label htmlFor="title">Title</Label><Input id="title" maxLength={80} value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Name this collectible" /></div>
                 <div className="space-y-1.5">
@@ -612,18 +554,27 @@ export function PurchasePanel() {
                 </div>
                 <div className="space-y-1.5"><Label htmlFor="external-link">External link</Label><Input id="external-link" type="url" value={externalLink} onChange={(event) => setExternalLink(event.target.value)} placeholder="https://..." /></div>
               </div>
+            ) : (
+              <div className="rounded-md border border-border bg-background/60 p-4">
+                <p className="font-medium">Sign in to customize and buy this hex.</p>
+                <p className="mt-1 text-sm text-muted-foreground">Create your title, message, image, and link after signing in.</p>
+              </div>
             )}
 
             {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
             {purchased ? (
               <p className="text-sm text-muted-foreground">This collectible belongs permanently to its owner.</p>
-            ) : (
+            ) : canCustomize ? (
               <div className="sticky bottom-[-1.25rem] z-10 -mx-5 -mb-5 border-t border-border bg-[#0b1117] p-4 pb-[max(1rem,env(safe-area-inset-bottom))] md:static md:m-0 md:border-0 md:bg-transparent md:p-0">
                 <Button className="h-12 w-full md:h-10" onClick={() => setConfirmPurchase(true)} disabled={busy}>
                   {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShoppingCart className="h-4 w-4" />}
                   {busy ? purchaseStep ?? "Creating your hex..." : "Buy this Hex - $1"}
                 </Button>
+              </div>
+            ) : (
+              <div className="sticky bottom-[-1.25rem] z-10 -mx-5 -mb-5 border-t border-border bg-[#0b1117] p-4 pb-[max(1rem,env(safe-area-inset-bottom))] md:static md:m-0 md:border-0 md:bg-transparent md:p-0">
+                <Button className="h-12 w-full md:h-10" onClick={() => redirectToSignIn("/")}>Sign in</Button>
               </div>
             )}
           </div>

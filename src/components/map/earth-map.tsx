@@ -7,7 +7,6 @@ import { useSession } from "next-auth/react";
 import { Check, Layers3, SlidersHorizontal, X } from "lucide-react";
 import { DEMO_USER, isClientDemoMode } from "@/lib/demo";
 import { getDemoOwnedHexes } from "@/lib/demo-storage";
-import { getPendingHexPurchase } from "@/lib/pending-hex-purchase";
 import { useMapStore, type SelectedHex } from "@/stores/map-store";
 
 const sourceId = "earth-hexes";
@@ -747,27 +746,10 @@ export function EarthMap() {
       void loadHexes();
       void loadCustomImages();
 
-      const urlParams = new URLSearchParams(window.location.search);
-      const resumeRequested = urlParams.get("resumePurchase") === "1";
-      const resumeH3Index = urlParams.get("h3Index");
-      const pendingPurchase = resumeRequested ? getPendingHexPurchase() : null;
-      const requestedHex = urlParams.get("hex");
-      const pendingHex = pendingPurchase &&
-        isValidCell(pendingPurchase.h3Index) &&
-        (!resumeH3Index || resumeH3Index === pendingPurchase.h3Index)
-        ? pendingPurchase
-        : null;
-      const targetHex = pendingHex?.h3Index ?? (requestedHex && isValidCell(requestedHex) ? requestedHex : null);
-      if (targetHex) {
-        const [cellLat, cellLng] = cellToLatLng(targetHex);
-        const selection: SelectedHex = {
-          h3Index: targetHex,
-          lng: pendingHex?.lng ?? cellLng,
-          lat: pendingHex?.lat ?? cellLat
-        };
-        if (pendingHex) {
-          console.log("[purchase-resume] draft restored on map", pendingHex);
-        }
+      const requestedHex = new URLSearchParams(window.location.search).get("hex");
+      if (requestedHex && isValidCell(requestedHex)) {
+        const [lat, lng] = cellToLatLng(requestedHex);
+        const selection: SelectedHex = { h3Index: requestedHex, lng, lat };
         setSelectedHex(selection);
         map.once("moveend", () => {
           setSelectedHex(selection);
@@ -782,7 +764,7 @@ export function EarthMap() {
           }
         });
         map.flyTo({
-          center: [selection.lng, selection.lat],
+          center: [lng, lat],
           zoom: Math.max(map.getZoom(), HEX_INTERACTION_ZOOM),
           duration: 1500,
           essential: true

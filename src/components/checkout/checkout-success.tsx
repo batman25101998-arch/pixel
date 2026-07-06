@@ -5,7 +5,6 @@ import Link from "next/link";
 import { CheckCircle2, Copy, Loader2, Share2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { clearPendingHexPurchase } from "@/lib/pending-hex-purchase";
 
 type CheckoutResult = {
   status: "REQUIRES_PAYMENT" | "PROCESSING" | "SUCCEEDED" | "FAILED" | "REFUNDED" | "CANCELED" | "PENDING";
@@ -32,10 +31,6 @@ export function CheckoutSuccess({ sessionId }: { sessionId: string }) {
         const nextResult = (await response.json()) as CheckoutResult;
         if (cancelled) return;
         setResult(nextResult);
-
-        if (nextResult.status === "SUCCEEDED" && nextResult.certificate) {
-          clearPendingHexPurchase();
-        }
 
         if (["PENDING", "REQUIRES_PAYMENT", "PROCESSING"].includes(nextResult.status) && attempts < 20) {
           timer = setTimeout(checkPayment, 1500);
