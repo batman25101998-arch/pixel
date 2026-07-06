@@ -18,6 +18,7 @@ const selectedLineLayerId = "earth-hex-selected-line";
 const dashboardFocusSourceId = "earth-hex-dashboard-focus";
 const dashboardFocusFillLayerId = "earth-hex-dashboard-focus-fill";
 const dashboardFocusLineLayerId = "earth-hex-dashboard-focus-line";
+const AVAILABLE_ONLY_STORAGE_KEY = "pixel-earth-show-available-only";
 export const HEX_INTERACTION_ZOOM = 7;
 type LayerVisibility = {
   images: boolean;
@@ -31,6 +32,14 @@ function applyLayerVisibility(map: Map, visibility: LayerVisibility) {
     }
   };
   setVisibility([fillLayerId, outlineLayerId], visibility.hexGrid);
+}
+
+function applyAvailableHexFilter(map: Map, availableOnly: boolean) {
+  const filter: maplibregl.FilterSpecification | null = availableOnly
+    ? ["==", ["get", "status"], "AVAILABLE"]
+    : null;
+  if (map.getLayer(fillLayerId)) map.setFilter(fillLayerId, filter);
+  if (map.getLayer(outlineLayerId)) map.setFilter(outlineLayerId, filter);
 }
 
 const darkMapStyle: string | StyleSpecification =
@@ -465,11 +474,24 @@ export function EarthMap() {
     images: true,
     hexGrid: true
   });
+  const [availableOnly, setAvailableOnly] = useState(false);
+  const [availableFilterLoaded, setAvailableFilterLoaded] = useState(false);
   const layerVisibilityRef = useRef(layerVisibility);
+  const availableOnlyRef = useRef(availableOnly);
   const setSelectedHex = useMapStore((state) => state.setSelectedHex);
   const selectedHex = useMapStore((state) => state.selectedHex);
   const refreshToken = useMapStore((state) => state.refreshToken);
   const focusTarget = useMapStore((state) => state.focusTarget);
+
+  useEffect(() => {
+    setAvailableOnly(window.localStorage.getItem(AVAILABLE_ONLY_STORAGE_KEY) === "true");
+    setAvailableFilterLoaded(true);
+  }, []);
+
+  useEffect(() => {
+    if (!availableFilterLoaded) return;
+    window.localStorage.setItem(AVAILABLE_ONLY_STORAGE_KEY, String(availableOnly));
+  }, [availableFilterLoaded, availableOnly]);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -616,7 +638,7 @@ export function EarthMap() {
         map,
         canvas,
         data,
-        layerVisibilityRef.current.images,
+        layerVisibilityRef.current.images && !availableOnlyRef.current,
         customImageCacheRef.current,
         () => drawId === imageDrawRef.current
       ).catch((error) => console.error("Custom hex image draw failed", error));
@@ -624,7 +646,7 @@ export function EarthMap() {
 
     async function loadCustomImages() {
       const requestId = ++imageRequestRef.current;
-      if (!layerVisibilityRef.current.images) {
+      if (!layerVisibilityRef.current.images || availableOnlyRef.current) {
         customImageDataRef.current = { type: "FeatureCollection", features: [] };
         clearCustomImageCanvas(customImageCanvasRef.current);
         return;
@@ -742,6 +764,7 @@ export function EarthMap() {
       });
 
       applyLayerVisibility(map, layerVisibilityRef.current);
+      applyAvailableHexFilter(map, availableOnlyRef.current);
 
       void loadHexes();
       void loadCustomImages();
@@ -925,7 +948,7 @@ export function EarthMap() {
       .catch((error) => {
         console.error("/api/hexes refresh failed", error);
       });
-    if (layerVisibilityRef.current.images) {
+    if (layerVisibilityRef.current.images && !availableOnlyRef.current) {
       const requestId = ++imageRequestRef.current;
       void customImageCollectionForMap(map)
         .then((data) => {
@@ -945,9 +968,12 @@ export function EarthMap() {
   useEffect(() => {
     const map = mapRef.current;
     layerVisibilityRef.current = layerVisibility;
+    availableOnlyRef.current = availableOnly;
     if (map?.isStyleLoaded()) applyLayerVisibility(map, layerVisibility);
+    if (map?.isStyleLoaded()) applyAvailableHexFilter(map, availableOnly);
     if (!map) return;
-    if (!layerVisibility.images) {
+    if (availableOnly && selectedHex?.purchased) setSelectedHex(null);
+    if (!layerVisibility.images || availableOnly) {
       imageDrawRef.current += 1;
       clearCustomImageCanvas(customImageCanvasRef.current);
       return;
@@ -963,7 +989,7 @@ export function EarthMap() {
         return renderCustomImageCanvas(map, canvas, data, true, customImageCacheRef.current, () => drawId === imageDrawRef.current);
       })
       .catch((error) => console.error("Custom hex image refresh failed", error));
-  }, [layerVisibility, setSelectedHex]);
+  }, [availableOnly, layerVisibility, selectedHex?.purchased, setSelectedHex]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -1005,6 +1031,15 @@ export function EarthMap() {
           Click again to view this hex.
         </div>
       ) : null}
+      <label className="absolute left-3 top-[4.5rem] z-20 flex h-9 cursor-pointer items-center gap-2 rounded-md border border-white/15 bg-[#071827] px-3 text-xs font-medium text-slate-100 shadow-xl md:left-4 md:top-[4.75rem]">
+        <input
+          type="checkbox"
+          checked={availableOnly}
+          onChange={(event) => setAvailableOnly(event.target.checked)}
+          className="h-4 w-4 accent-emerald-400"
+        />
+        <span>Show available hexes only</span>
+      </label>
       <button
         type="button"
         aria-label={layersOpen ? "Close map layers" : "Open map layers"}
