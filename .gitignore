@@ -7,3 +7,6 @@ coverage
 *.log
 uploads
 pixel/
+
+.vercel
+.env*

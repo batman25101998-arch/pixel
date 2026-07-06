@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "launch:reset": "tsx scripts/reset-launch.ts",
     "reset:production-data": "tsx scripts/reset-production-data.ts",
     "build": "prisma generate && next build",
     "start": "next start",
