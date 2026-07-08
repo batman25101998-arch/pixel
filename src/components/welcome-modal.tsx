@@ -35,7 +35,7 @@ export function WelcomeModal() {
 
     if (startExploring) {
       document.getElementById("world-map")?.scrollIntoView({ behavior: "smooth", block: "start" });
-      window.dispatchEvent(new CustomEvent("pixel-earth:buy-first-hex"));
+      window.dispatchEvent(new CustomEvent("pixel-earth:onboarding-start-exploring"));
     }
   }
 

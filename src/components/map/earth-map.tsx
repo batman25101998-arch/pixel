@@ -499,6 +499,7 @@ export function EarthMap() {
     map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "bottom-right");
     map.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-left");
     map.resize();
+    const notifyMapInteracted = () => window.dispatchEvent(new CustomEvent("pixel-earth:map-interacted"));
     let dashboardPulseTimer: number | null = null;
     let dashboardPulseInterval: number | null = null;
     let interactionHintTimer: number | null = null;
@@ -808,6 +809,8 @@ export function EarthMap() {
     };
     map.on("move", scheduleImageDraw);
     map.on("resize", scheduleImageDraw);
+    map.on("dragstart", notifyMapInteracted);
+    map.on("zoomstart", notifyMapInteracted);
 
     let hoveredFeatureId: string | number | null = null;
 
@@ -832,6 +835,7 @@ export function EarthMap() {
     });
 
     map.on("click", async (event) => {
+      notifyMapInteracted();
       const features = map.queryRenderedFeatures(event.point, { layers: [fillLayerId] });
       if (features[0]) {
         const props = features[0].properties as Record<string, unknown>;
@@ -891,6 +895,8 @@ export function EarthMap() {
       imageDrawRef.current += 1;
       clearCustomImageCanvas(customImageCanvasRef.current);
       window.removeEventListener("pixel-earth:buy-first-hex", focusForFirstPurchase);
+      map.off("dragstart", notifyMapInteracted);
+      map.off("zoomstart", notifyMapInteracted);
       searchMarkerRef.current?.remove();
       map.remove();
       mapRef.current = null;

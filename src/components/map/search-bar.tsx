@@ -49,6 +49,7 @@ export function SearchBar() {
   const [activeLabel, setActiveLabel] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [onboardingTipVisible, setOnboardingTipVisible] = useState(false);
   const setSelectedHex = useMapStore((state) => state.setSelectedHex);
   const focusMap = useMapStore((state) => state.focusMap);
 
@@ -62,7 +63,42 @@ export function SearchBar() {
     return () => window.removeEventListener("pixel-earth:buy-first-hex", closeSuggestions);
   }, []);
 
+  useEffect(() => {
+    let hideTimer: number | null = null;
+
+    const hideTip = () => {
+      setOnboardingTipVisible(false);
+      if (hideTimer !== null) {
+        window.clearTimeout(hideTimer);
+        hideTimer = null;
+      }
+    };
+
+    const showTip = () => {
+      setResults([]);
+      setError(null);
+      setActiveLabel(null);
+      setOnboardingTipVisible(true);
+      if (hideTimer !== null) window.clearTimeout(hideTimer);
+      hideTimer = window.setTimeout(hideTip, 5000);
+    };
+
+    window.addEventListener("pixel-earth:onboarding-start-exploring", showTip);
+    window.addEventListener("pixel-earth:map-interacted", hideTip);
+    return () => {
+      window.removeEventListener("pixel-earth:onboarding-start-exploring", showTip);
+      window.removeEventListener("pixel-earth:map-interacted", hideTip);
+      if (hideTimer !== null) window.clearTimeout(hideTimer);
+    };
+  }, []);
+
+  function markInteracted() {
+    setOnboardingTipVisible(false);
+    window.dispatchEvent(new CustomEvent("pixel-earth:map-interacted"));
+  }
+
   function selectResult(result: SearchResult) {
+    markInteracted();
     const properties = result.properties;
     if (result.type === "hex" && result.h3Index) {
       setSelectedHex({
@@ -99,6 +135,7 @@ export function SearchBar() {
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    markInteracted();
     const normalized = query.trim();
     setError(null);
     setResults([]);
@@ -139,8 +176,13 @@ export function SearchBar() {
 
   return (
     <div className="absolute left-3 right-3 top-3 z-20 md:left-4 md:right-auto md:top-4 md:w-[min(500px,calc(100vw-2rem))]">
+      {onboardingTipVisible ? (
+        <div role="status" className="mb-2 rounded-md border border-cyan-300/25 bg-[#0b1117] px-3 py-2 text-xs font-medium text-cyan-100 shadow-2xl sm:text-sm">
+          Search for a place or zoom in to claim an available hex.
+        </div>
+      ) : null}
       <form onSubmit={submit} className="flex flex-wrap gap-2 rounded-lg border border-border bg-[#0b1117] p-2 shadow-xl">
-        <Input id="map-search-input" className="min-w-0 flex-1 text-base md:text-sm" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search a place or hex" aria-label="Search the world map" />
+        <Input id="map-search-input" className="min-w-0 flex-1 text-base md:text-sm" value={query} onChange={(event) => { markInteracted(); setQuery(event.target.value); }} placeholder="Search a place or hex" aria-label="Search the world map" />
         <Button type="submit" size="icon" aria-label="Search" disabled={loading}>
           {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
         </Button>
