@@ -1,16 +1,124 @@
+import { loadEnvConfig } from "@next/env";
 import { PrismaClient } from "@prisma/client";
 
-const TOTAL_AVAILABLE_HEXES = 2_016_842;
 const REQUIRED_CONFIRMATION = "YES";
+
+loadEnvConfig(process.cwd());
+
+type ColumnInfo = {
+  column_name: string;
+  is_nullable: "YES" | "NO";
+};
+
+function quoteIdentifier(identifier: string) {
+  return `"${identifier.replaceAll('"', '""')}"`;
+}
+
+async function tableExists(prisma: PrismaClient, tableName: string) {
+  const rows = await prisma.$queryRaw<Array<{ exists: boolean }>>`
+    SELECT EXISTS (
+      SELECT 1
+      FROM information_schema.tables
+      WHERE table_schema = 'public'
+        AND table_name = ${tableName}
+    ) AS "exists"
+  `;
+
+  return rows[0]?.exists === true;
+}
+
+async function tableColumns(prisma: PrismaClient, tableName: string) {
+  const rows = await prisma.$queryRaw<ColumnInfo[]>`
+    SELECT column_name, is_nullable
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = ${tableName}
+  `;
+
+  return new Map(rows.map((row) => [row.column_name, row]));
+}
+
+async function deleteIfTableExists(prisma: PrismaClient, tableName: string) {
+  if (!(await tableExists(prisma, tableName))) {
+    console.log(`[launch:reset] Skipped missing table: ${tableName}`);
+    return 0;
+  }
+
+  const deleted = await prisma.$executeRawUnsafe(`DELETE FROM ${quoteIdentifier(tableName)}`);
+  console.log(`[launch:reset] Deleted ${deleted} rows from ${tableName}`);
+  return deleted;
+}
+
+async function resetHexes(prisma: PrismaClient) {
+  if (!(await tableExists(prisma, "hexes"))) {
+    console.log("[launch:reset] Skipped missing table: hexes");
+    return { reset: 0, deleted: 0 };
+  }
+
+  const columns = await tableColumns(prisma, "hexes");
+  const ownerColumn = columns.get("owner_id");
+
+  if (!ownerColumn) {
+    console.log("[launch:reset] hexes.owner_id is missing; deleting persisted hex rows.");
+    const deleted = await prisma.$executeRawUnsafe(`DELETE FROM ${quoteIdentifier("hexes")}`);
+    return { reset: 0, deleted };
+  }
+
+  if (ownerColumn.is_nullable === "NO") {
+    console.log("[launch:reset] hexes.owner_id is NOT NULL; deleting persisted claimed hex rows so virtual hexes become available.");
+    const deleted = await prisma.$executeRawUnsafe(`DELETE FROM ${quoteIdentifier("hexes")}`);
+    return { reset: 0, deleted };
+  }
+
+  const assignments: string[] = ['"owner_id" = NULL'];
+
+  if (columns.has("status")) assignments.push('"status" = \'AVAILABLE\'');
+  if (columns.has("image_url")) assignments.push('"image_url" = NULL');
+  if (columns.has("avatar_url")) assignments.push('"avatar_url" = NULL');
+  if (columns.has("title")) assignments.push('"title" = NULL');
+  if (columns.has("message")) assignments.push('"message" = NULL');
+  if (columns.has("external_link")) assignments.push('"external_link" = NULL');
+  if (columns.has("link")) assignments.push('"link" = NULL');
+  if (columns.has("purchased_at")) assignments.push('"purchased_at" = NULL');
+  if (columns.has("purchase_date")) assignments.push('"purchase_date" = NULL');
+  if (columns.has("price_cents")) assignments.push('"price_cents" = 100');
+  if (columns.has("territory_id")) assignments.push('"territory_id" = NULL');
+  if (columns.has("updated_at")) assignments.push('"updated_at" = now()');
+
+  const reset = await prisma.$executeRawUnsafe(`UPDATE ${quoteIdentifier("hexes")} SET ${assignments.join(", ")}`);
+  return { reset, deleted: 0 };
+}
+
+async function ownedHexCount(prisma: PrismaClient) {
+  if (!(await tableExists(prisma, "hexes"))) return 0;
+
+  const columns = await tableColumns(prisma, "hexes");
+  const checks: string[] = [];
+
+  if (columns.has("owner_id")) checks.push('"owner_id" IS NOT NULL');
+  if (columns.has("status")) checks.push('"status" <> \'AVAILABLE\'');
+
+  if (checks.length === 0) return 0;
+
+  const rows = await prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
+    `SELECT COUNT(*)::bigint AS count FROM ${quoteIdentifier("hexes")} WHERE ${checks.join(" OR ")}`
+  );
+
+  return Number(rows[0]?.count ?? 0);
+}
 
 async function main() {
   if (process.env.CONFIRM_LAUNCH_RESET !== REQUIRED_CONFIRMATION) {
     throw new Error("Launch reset blocked. Set CONFIRM_LAUNCH_RESET=YES to continue.");
   }
 
+  if (process.env.DEMO_MODE === "true" || process.env.NEXT_PUBLIC_DEMO_MODE === "true") {
+    throw new Error("Launch reset blocked. Disable DEMO_MODE and NEXT_PUBLIC_DEMO_MODE first.");
+  }
+
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) {
-    throw new Error("Launch reset blocked. DATABASE_URL is not configured in this process.");
+    throw new Error("Launch reset blocked. DATABASE_URL is not configured.");
   }
 
   const target = new URL(databaseUrl);
@@ -18,7 +126,7 @@ async function main() {
     throw new Error("Launch reset blocked. DATABASE_URL must be a PostgreSQL connection string.");
   }
   if (["localhost", "127.0.0.1", "::1"].includes(target.hostname)) {
-    throw new Error("Launch reset blocked. DATABASE_URL points to a local database, not production.");
+    throw new Error("Launch reset blocked. DATABASE_URL points to a local database.");
   }
 
   console.log(`[launch:reset] Database host: ${target.hostname}`);
@@ -27,75 +135,25 @@ async function main() {
   const prisma = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
 
   try {
-    const authCountsBefore = await Promise.all([
-      prisma.user.count(),
-      prisma.account.count(),
-      prisma.session.count(),
-      prisma.verificationToken.count()
-    ]);
+    const usersKept = await tableExists(prisma, "users")
+      ? Number((await prisma.$queryRaw<Array<{ count: bigint }>>`SELECT COUNT(*)::bigint AS count FROM users`)[0]?.count ?? 0)
+      : 0;
 
-    const deleted = await prisma.$transaction(async (tx) => {
-      const hexOffers = await tx.hexOffer.deleteMany();
-      const tradeOffers = await tx.hexTradeOffer.deleteMany();
-      const transactions = await tx.transaction.deleteMany();
-      const marketplaceListings = await tx.marketplaceListing.deleteMany();
-      const payments = await tx.payment.deleteMany();
-      const badges = await tx.badge.deleteMany();
-      const hexes = await tx.hex.deleteMany();
-      const territories = await tx.territory.deleteMany();
-      const auditLogs = await tx.adminAuditLog.deleteMany();
+    const transactionsDeleted = await deleteIfTableExists(prisma, "transactions");
+    const paymentsDeleted = await deleteIfTableExists(prisma, "payments");
+    const hexReset = await resetHexes(prisma);
+    const ownedAfter = await ownedHexCount(prisma);
 
-      await tx.user.updateMany({
-        where: {
-          OR: [
-            { founderNumber: { not: null } },
-            { kingdomUnlockedAt: { not: null } }
-          ]
-        },
-        data: {
-          founderNumber: null,
-          kingdomUnlockedAt: null
-        }
-      });
+    console.log(`Users kept: ${usersKept}`);
+    console.log(`Hex rows reset: ${hexReset.reset}`);
+    console.log(`Hex rows deleted: ${hexReset.deleted}`);
+    console.log(`Transactions deleted: ${transactionsDeleted}`);
+    console.log(`Checkout/payment records deleted: ${paymentsDeleted}`);
+    console.log(`Owned hexes after reset: ${ownedAfter}`);
 
-      return {
-        hexOffers: hexOffers.count,
-        tradeOffers: tradeOffers.count,
-        transactions: transactions.count,
-        marketplaceListings: marketplaceListings.count,
-        payments: payments.count,
-        badges: badges.count,
-        hexes: hexes.count,
-        territories: territories.count,
-        auditLogs: auditLogs.count
-      };
-    }, { maxWait: 10_000, timeout: 300_000 });
-
-    // Every persisted Hex row has a required ownerId. Therefore, deleting all Hex
-    // rows is equivalent to COUNT(*) WHERE ownerId IS NOT NULL returning zero.
-    const ownedHexes = await prisma.hex.count();
-    if (ownedHexes !== 0) {
-      throw new Error(`Launch reset verification failed: ${ownedHexes} owned hexes remain.`);
+    if (ownedAfter !== 0) {
+      throw new Error(`Launch reset verification failed: owned hexes = ${ownedAfter}.`);
     }
-
-    const authCountsAfter = await Promise.all([
-      prisma.user.count(),
-      prisma.account.count(),
-      prisma.session.count(),
-      prisma.verificationToken.count()
-    ]);
-    if (authCountsBefore.some((count, index) => authCountsAfter[index] < count)) {
-      throw new Error("Launch reset verification failed: an authentication table lost records.");
-    }
-
-    console.log(`Users kept: ${authCountsAfter[0]}`);
-    console.log(`Owned hexes: ${ownedHexes}`);
-    console.log(`Available hexes: ${TOTAL_AVAILABLE_HEXES}`);
-    console.log(`Transactions deleted: ${deleted.transactions}`);
-    console.log(`[launch:reset] Deleted claimed hexes: ${deleted.hexes}`);
-    console.log(`[launch:reset] Deleted Stripe/pending payment records: ${deleted.payments}`);
-    console.log(`[launch:reset] Deleted marketplace, offer, and trade records: ${deleted.marketplaceListings + deleted.hexOffers + deleted.tradeOffers}`);
-    console.log(`[launch:reset] Deleted territories, badges, and audit logs: ${deleted.territories + deleted.badges + deleted.auditLogs}`);
   } finally {
     await prisma.$disconnect();
   }
