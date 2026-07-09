@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { signIn, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
@@ -21,6 +21,7 @@ export function SignInForm({ googleEnabled, callbackUrl }: SignInFormProps) {
   const router = useRouter();
   const session = useSession();
   const destination = safeAuthCallbackUrl(callbackUrl);
+  const googleTimeoutRef = useRef<number | null>(null);
   const [busyProvider, setBusyProvider] = useState<BusyProvider>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -32,25 +33,27 @@ export function SignInForm({ googleEnabled, callbackUrl }: SignInFormProps) {
     }
   }, [destination, router, session.status]);
 
+  useEffect(() => {
+    return () => {
+      if (googleTimeoutRef.current !== null) window.clearTimeout(googleTimeoutRef.current);
+    };
+  }, []);
+
   async function signInWithGoogle() {
+    if (busyProvider === "google") return;
     setBusyProvider("google");
     setError(null);
+    if (googleTimeoutRef.current !== null) window.clearTimeout(googleTimeoutRef.current);
+    googleTimeoutRef.current = window.setTimeout(() => {
+      setBusyProvider(null);
+      setError("Try again.");
+    }, 5000);
+
     try {
-      const canonicalOrigin = process.env.NEXT_PUBLIC_APP_URL
-        ? new URL(process.env.NEXT_PUBLIC_APP_URL).origin
-        : window.location.origin;
-
-      if (window.location.origin !== canonicalOrigin) {
-        const canonicalSignInUrl = new URL("/sign-in", canonicalOrigin);
-        if (destination !== "/") canonicalSignInUrl.searchParams.set("callbackUrl", destination);
-        window.location.assign(canonicalSignInUrl.toString());
-        return;
-      }
-
-      const callbackUrl = new URL(destination, canonicalOrigin).toString();
-      console.log("[auth] Google signIn callbackUrl", callbackUrl);
-      await signIn("google", { callbackUrl });
+      await signIn("google", { callbackUrl: "/" });
     } catch {
+      if (googleTimeoutRef.current !== null) window.clearTimeout(googleTimeoutRef.current);
+      googleTimeoutRef.current = null;
       setBusyProvider(null);
       setError("Google sign-in could not be started.");
     }

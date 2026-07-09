@@ -106,6 +106,9 @@ function authAdapter(): Adapter {
   };
 }
 
+// If Google sign-in only works for one address, fix it in Google Cloud:
+// publish the OAuth consent screen or add every tester under Test users.
+// Do not add an app-side Google email allowlist here.
 const oauthProviders = googleAuthConfigured
   ? [Google({ clientId: env.GOOGLE_CLIENT_ID!, clientSecret: env.GOOGLE_CLIENT_SECRET! })]
   : [];
