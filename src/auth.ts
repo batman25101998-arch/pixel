@@ -2,6 +2,7 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
 import type { Adapter, AdapterUser } from "next-auth/adapters";
+import type { Prisma } from "@prisma/client";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
@@ -49,6 +50,10 @@ async function uniqueUsername(email: string) {
   return candidate;
 }
 
+function fallbackNameForEmail(email: string) {
+  return email.split("@")[0].trim().slice(0, 48) || "Earth Owner";
+}
+
 function authAdapter(): Adapter {
   const base = PrismaAdapter(prisma);
 
@@ -56,23 +61,34 @@ function authAdapter(): Adapter {
     ...base,
     async createUser(data) {
       const email = data.email.toLowerCase();
-      console.info("[auth] Creating user from OAuth/email sign-in", {
+      console.info("[auth] createUser start", {
         email,
-        admin: isAdminEmail(email)
+        role: isAdminEmail(email) ? "ADMIN" : "USER",
+        hasName: Boolean(data.name?.trim()),
+        hasImage: Boolean(data.image)
       });
-      const user = await prisma.user.create({
-        data: {
+      try {
+        const user = await prisma.user.create({
+          data: {
+            email,
+            username: await uniqueUsername(email),
+            displayName: data.name?.trim().slice(0, 48) || fallbackNameForEmail(email),
+            avatarUrl: data.image || null,
+            emailVerified: data.emailVerified,
+            role: isAdminEmail(email) ? "ADMIN" : "USER",
+            lastLoginAt: new Date()
+          }
+        });
+        console.info("[auth] createUser success", { email: user.email, userId: user.id, role: user.role });
+        return toAdapterUser(user);
+      } catch (error) {
+        console.error("[auth] createUser failed", {
           email,
-          username: await uniqueUsername(email),
-          displayName: (data.name?.trim() || email.split("@")[0]).slice(0, 48),
-          avatarUrl: data.image,
-          emailVerified: data.emailVerified,
           role: isAdminEmail(email) ? "ADMIN" : "USER",
-          lastLoginAt: new Date()
-        }
-      });
-      console.info("[auth] User created", { email: user.email, userId: user.id, role: user.role });
-      return toAdapterUser(user);
+          error
+        });
+        throw error;
+      }
     },
     async getUser(id) {
       const user = await prisma.user.findUnique({ where: { id } });
@@ -122,11 +138,36 @@ function authAdapter(): Adapter {
   };
 }
 
-// If Google sign-in only works for one address, fix it in Google Cloud:
-// publish the OAuth consent screen or add every tester under Test users.
-// Do not add an app-side Google email allowlist here.
 const oauthProviders = googleAuthConfigured
-  ? [Google({ clientId: env.GOOGLE_CLIENT_ID!, clientSecret: env.GOOGLE_CLIENT_SECRET! })]
+  ? [
+      Google({
+        clientId: env.GOOGLE_CLIENT_ID!,
+        clientSecret: env.GOOGLE_CLIENT_SECRET!,
+        profile(profile) {
+          const googleProfile = profile as Prisma.JsonObject & {
+            sub?: unknown;
+            name?: unknown;
+            email?: unknown;
+            picture?: unknown;
+            email_verified?: unknown;
+          };
+          const email = typeof googleProfile.email === "string" ? googleProfile.email.toLowerCase() : "";
+          console.info("[auth] google profile email", {
+            email: email || null,
+            emailVerified: Boolean(googleProfile.email_verified),
+            hasName: typeof googleProfile.name === "string" && googleProfile.name.trim().length > 0,
+            hasPicture: typeof googleProfile.picture === "string" && googleProfile.picture.length > 0
+          });
+          return {
+            id: typeof googleProfile.sub === "string" ? googleProfile.sub : email,
+            name: typeof googleProfile.name === "string" ? googleProfile.name : fallbackNameForEmail(email),
+            email,
+            image: typeof googleProfile.picture === "string" ? googleProfile.picture : null,
+            emailVerified: googleProfile.email_verified ? new Date() : null
+          };
+        }
+      })
+    ]
   : [];
 
 const nextAuth = NextAuth({
@@ -194,25 +235,28 @@ const nextAuth = NextAuth({
           : null;
 
         if (!existingUser) {
-          console.info("[auth] signIn allowed; user will be created if this is a new OAuth account", {
+          console.info("[auth] signIn allowed", {
             provider: account?.provider ?? "credentials",
-            email
+            email,
+            reason: "new-user-or-adapter-create"
           });
           return true;
         }
 
         if (existingUser.bannedAt) {
-          console.warn("[auth] signIn blocked; user is banned", {
+          console.warn("[auth] signIn rejected", {
             email: existingUser.email,
             userId: existingUser.id,
+            reason: "banned",
             bannedAt: existingUser.bannedAt.toISOString()
           });
           return false;
         }
 
-        console.info("[auth] signIn allowed; user found", {
+        console.info("[auth] signIn allowed", {
           email: existingUser.email,
-          userId: existingUser.id
+          userId: existingUser.id,
+          reason: "existing-user-not-banned"
         });
         return true;
       } catch (error) {
