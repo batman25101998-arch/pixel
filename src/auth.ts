@@ -8,7 +8,6 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { DEMO_USER } from "@/lib/demo";
 import { env, isAdminEmail, isDemoMode } from "@/lib/env";
-import { createFounderEligibleUser } from "@/lib/founders";
 
 const credentialsSchema = z.object({
   email: z.string().email(),
@@ -57,15 +56,22 @@ function authAdapter(): Adapter {
     ...base,
     async createUser(data) {
       const email = data.email.toLowerCase();
-      const user = await createFounderEligibleUser({
+      console.info("[auth] Creating user from OAuth/email sign-in", {
         email,
-        username: await uniqueUsername(email),
-        displayName: (data.name?.trim() || email.split("@")[0]).slice(0, 48),
-        avatarUrl: data.image,
-        emailVerified: data.emailVerified,
-        role: isAdminEmail(email) ? "ADMIN" : "USER",
-        lastLoginAt: new Date()
+        admin: isAdminEmail(email)
       });
+      const user = await prisma.user.create({
+        data: {
+          email,
+          username: await uniqueUsername(email),
+          displayName: (data.name?.trim() || email.split("@")[0]).slice(0, 48),
+          avatarUrl: data.image,
+          emailVerified: data.emailVerified,
+          role: isAdminEmail(email) ? "ADMIN" : "USER",
+          lastLoginAt: new Date()
+        }
+      });
+      console.info("[auth] User created", { email: user.email, userId: user.id, role: user.role });
       return toAdapterUser(user);
     },
     async getUser(id) {
@@ -73,7 +79,12 @@ function authAdapter(): Adapter {
       return user ? toAdapterUser(user) : null;
     },
     async getUserByEmail(email) {
-      const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
+      const normalizedEmail = email.toLowerCase();
+      const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+      console.info("[auth] User lookup by email", {
+        email: normalizedEmail,
+        found: Boolean(user)
+      });
       return user ? toAdapterUser(user) : null;
     },
     async getUserByAccount(providerAccountId) {
@@ -85,6 +96,11 @@ function authAdapter(): Adapter {
           }
         },
         include: { user: true }
+      });
+      console.info("[auth] User lookup by OAuth account", {
+        provider: providerAccountId.provider,
+        found: Boolean(account?.user),
+        email: account?.user.email ?? null
       });
       return account ? toAdapterUser(account.user) : null;
     },
@@ -154,14 +170,59 @@ const nextAuth = NextAuth({
     })
   ],
   callbacks: {
-    async signIn({ user }) {
+    async signIn({ user, account, profile }) {
       if (isDemoMode) return true;
-      if (!user.id) return true;
-      const account = await prisma.user.findUnique({
-        where: { id: user.id },
-        select: { bannedAt: true }
+      const email =
+        typeof user.email === "string"
+          ? user.email.toLowerCase()
+          : typeof profile?.email === "string"
+            ? profile.email.toLowerCase()
+            : null;
+
+      console.info("[auth] signIn callback", {
+        provider: account?.provider ?? "credentials",
+        email,
+        userId: user.id ?? null
       });
-      return !account?.bannedAt;
+
+      try {
+        const existingUser = email
+          ? await prisma.user.findUnique({
+              where: { email },
+              select: { id: true, email: true, bannedAt: true }
+            })
+          : null;
+
+        if (!existingUser) {
+          console.info("[auth] signIn allowed; user will be created if this is a new OAuth account", {
+            provider: account?.provider ?? "credentials",
+            email
+          });
+          return true;
+        }
+
+        if (existingUser.bannedAt) {
+          console.warn("[auth] signIn blocked; user is banned", {
+            email: existingUser.email,
+            userId: existingUser.id,
+            bannedAt: existingUser.bannedAt.toISOString()
+          });
+          return false;
+        }
+
+        console.info("[auth] signIn allowed; user found", {
+          email: existingUser.email,
+          userId: existingUser.id
+        });
+        return true;
+      } catch (error) {
+        console.error("[auth] signIn callback lookup failed; allowing non-banned OAuth flow to continue", {
+          provider: account?.provider ?? "credentials",
+          email,
+          error
+        });
+        return true;
+      }
     },
     async jwt({ token, user }) {
       if (isDemoMode) {
