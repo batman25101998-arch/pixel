@@ -28,6 +28,7 @@ export function SignInForm({ googleEnabled, callbackUrl, authError }: SignInForm
   const destination = safeAuthCallbackUrl(callbackUrl);
   const googleTimeoutRef = useRef<number | null>(null);
   const navigationStartedRef = useRef(false);
+  const googleStartedRef = useRef(false);
   const [busyProvider, setBusyProvider] = useState<BusyProvider>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -68,12 +69,13 @@ export function SignInForm({ googleEnabled, callbackUrl, authError }: SignInForm
   }, []);
 
   async function signInWithGoogle() {
-    if (busyProvider === "google") return;
+    if (googleStartedRef.current) return;
     if (inAppBrowser) {
-      setError("Open this page in Safari or Chrome to sign in with Google.");
+      setError("Open hexofearth.com in Safari or Chrome to sign in with Google.");
       return;
     }
 
+    googleStartedRef.current = true;
     setBusyProvider("google");
     setError(null);
     navigationStartedRef.current = false;
@@ -86,6 +88,7 @@ export function SignInForm({ googleEnabled, callbackUrl, authError }: SignInForm
     if (googleTimeoutRef.current !== null) window.clearTimeout(googleTimeoutRef.current);
     googleTimeoutRef.current = window.setTimeout(() => {
       if (navigationStartedRef.current) return;
+      googleStartedRef.current = false;
       setBusyProvider(null);
       setError("Google sign-in could not start. Please try again in your browser.");
     }, 10000);
@@ -99,6 +102,7 @@ export function SignInForm({ googleEnabled, callbackUrl, authError }: SignInForm
       if (result && typeof result === "object" && "error" in result && result.error) {
         if (googleTimeoutRef.current !== null) window.clearTimeout(googleTimeoutRef.current);
         googleTimeoutRef.current = null;
+        googleStartedRef.current = false;
         setBusyProvider(null);
         console.warn("[auth] google sign-in returned error", {
           origin: window.location.origin,
@@ -110,6 +114,7 @@ export function SignInForm({ googleEnabled, callbackUrl, authError }: SignInForm
     } catch (error) {
       if (googleTimeoutRef.current !== null) window.clearTimeout(googleTimeoutRef.current);
       googleTimeoutRef.current = null;
+      googleStartedRef.current = false;
       setBusyProvider(null);
       console.error("[auth] google sign-in threw", {
         origin: window.location.origin,
@@ -151,7 +156,7 @@ export function SignInForm({ googleEnabled, callbackUrl, authError }: SignInForm
       <CardContent className="space-y-5">
         {inAppBrowser ? (
           <p className="rounded-md border border-amber-300/30 bg-amber-400/10 px-3 py-2 text-sm text-amber-100">
-            Open this page in Safari or Chrome to sign in with Google.
+            Open hexofearth.com in Safari or Chrome to sign in with Google.
           </p>
         ) : null}
         <div className="grid gap-2">
