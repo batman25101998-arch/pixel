@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useSession } from "next-auth/react";
 import { Award, CheckCircle2, ImageUp, Loader2, MapPin, ShoppingCart, X } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -93,6 +94,7 @@ export function PurchasePanel() {
   const [purchaseImage, setPurchaseImage] = useState<File | null>(null);
   const [purchaseImagePreview, setPurchaseImagePreview] = useState<string | null>(null);
   const [confirmPurchase, setConfirmPurchase] = useState(false);
+  const [portalReady, setPortalReady] = useState(false);
 
   const purchased = selectedHex?.purchased;
   const status = purchased?.status ?? "AVAILABLE";
@@ -135,12 +137,28 @@ export function PurchasePanel() {
   }, [purchaseImagePreview]);
 
   useEffect(() => {
+    setPortalReady(true);
+  }, []);
+
+  useEffect(() => {
     if (!confirmPurchase) return;
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousBodyTouchAction = document.body.style.touchAction;
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.body.style.touchAction = "none";
+    document.documentElement.style.overflow = "hidden";
+
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") setConfirmPurchase(false);
     };
     window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
+    return () => {
+      window.removeEventListener("keydown", closeOnEscape);
+      document.body.style.overflow = previousBodyOverflow;
+      document.body.style.touchAction = previousBodyTouchAction;
+      document.documentElement.style.overflow = previousHtmlOverflow;
+    };
   }, [confirmPurchase]);
 
   useEffect(() => {
@@ -581,9 +599,9 @@ export function PurchasePanel() {
         ) : null}
       </div>
 
-      {confirmPurchase ? (
+      {confirmPurchase && portalReady ? createPortal(
         <div
-          className="fixed inset-0 z-50 flex items-end bg-black/70 md:items-center md:justify-center md:p-4"
+          className="fixed inset-0 z-[9999] flex items-end bg-black/85 md:items-center md:justify-center md:p-4"
           onClick={() => closePurchaseConfirmation()}
           onTouchStart={(event) => event.stopPropagation()}
         >
@@ -591,17 +609,19 @@ export function PurchasePanel() {
             aria-describedby="purchase-confirmation-description"
             aria-labelledby="purchase-confirmation-title"
             aria-modal="true"
-            className="w-full rounded-t-xl border border-b-0 border-border bg-[#0b1117] p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl md:max-w-md md:rounded-lg md:border-b md:p-6"
+            className="flex max-h-[90dvh] w-full flex-col overflow-y-auto overscroll-contain rounded-t-xl border border-b-0 border-border bg-[#0b1117] shadow-2xl md:max-w-md md:rounded-lg md:border-b"
             onClick={(event) => event.stopPropagation()}
             role="dialog"
           >
-            <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-slate-500/70 md:hidden" aria-hidden="true" />
-            <h2 id="purchase-confirmation-title" className="text-xl font-semibold">Confirm purchase</h2>
-            <p id="purchase-confirmation-description" className="mt-3 text-sm leading-6 text-muted-foreground">
-              You are purchasing this hex permanently for $1. This purchase cannot be undone.
-            </p>
-            {error ? <p className="mt-3 text-sm text-amber-300">{error}</p> : null}
-            <div className="mt-6 grid grid-cols-2 gap-3">
+            <div className="p-5 md:p-6">
+              <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-slate-500/70 md:hidden" aria-hidden="true" />
+              <h2 id="purchase-confirmation-title" className="text-xl font-semibold">Confirm purchase</h2>
+              <p id="purchase-confirmation-description" className="mt-3 text-sm leading-6 text-muted-foreground">
+                You are purchasing this hex permanently for $1. This purchase cannot be undone.
+              </p>
+              {error ? <p className="mt-3 text-sm text-amber-300">{error}</p> : null}
+            </div>
+            <div className="sticky bottom-0 grid grid-cols-2 gap-3 border-t border-border bg-[#0b1117] p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] md:p-6">
               <Button type="button" variant="outline" className="h-11" onClick={closePurchaseConfirmation}>Cancel</Button>
               <Button
                 type="button"
@@ -615,7 +635,8 @@ export function PurchasePanel() {
               </Button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       ) : null}
     </div>
   );
