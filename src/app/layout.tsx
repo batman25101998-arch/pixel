@@ -9,7 +9,7 @@ import { DEMO_USER } from "@/lib/demo";
 import { isDemoMode } from "@/lib/env";
 import "./globals.css";
 
-const productionUrl = "https://pixel-weld-tau.vercel.app";
+const productionUrl = "https://hexofearth.com";
 const title = "Own a Hex of Earth | Claim Your Place on Earth Forever";
 const description = "Claim your own permanent hex on Earth for just $1. Add your photo, message and personal link. Make your mark and own a unique place on Earth for generations.";
 

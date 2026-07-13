@@ -23,8 +23,12 @@ const serverSchema = z.object({
 
 export const isDemoMode = process.env.DEMO_MODE === "true";
 
+const productionAppUrl = "https://hexofearth.com";
 const configuredAuthUrl = process.env.AUTH_URL ?? process.env.NEXTAUTH_URL;
-const canonicalAppUrl = process.env.NEXT_PUBLIC_APP_URL ?? configuredAuthUrl ?? "http://localhost:3000";
+const canonicalAppUrl =
+  process.env.NODE_ENV === "production"
+    ? productionAppUrl
+    : process.env.NEXT_PUBLIC_APP_URL ?? configuredAuthUrl ?? "http://localhost:3000";
 const authSecret =
   process.env.AUTH_SECRET ??
   process.env.NEXTAUTH_SECRET ??

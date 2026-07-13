@@ -2,7 +2,7 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
 import type { Adapter, AdapterUser } from "next-auth/adapters";
-import type { Prisma } from "@prisma/client";
+import { Prisma, type UserRole } from "@prisma/client";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
@@ -16,6 +16,7 @@ const credentialsSchema = z.object({
 });
 
 export const googleAuthConfigured = Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET);
+const USERNAME_CREATE_ATTEMPTS = 5;
 
 function toAdapterUser(user: {
   id: string;
@@ -54,6 +55,39 @@ function fallbackNameForEmail(email: string) {
   return email.split("@")[0].trim().slice(0, 48) || "Earth Owner";
 }
 
+function errorDetails(error: unknown) {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+      cause: error.cause
+    };
+  }
+
+  return { message: String(error) };
+}
+
+function authLoggerMeta(metadata: unknown): Record<string, unknown> {
+  if (!metadata || typeof metadata !== "object") return { metadata };
+  const record = metadata as Record<string, unknown>;
+  const error = record.error;
+  const cause = record.cause;
+  const provider =
+    typeof record.provider === "string"
+      ? record.provider
+      : typeof (record.account as Record<string, unknown> | undefined)?.provider === "string"
+        ? String((record.account as Record<string, unknown>).provider)
+        : undefined;
+
+  return {
+    provider,
+    error: errorDetails(error),
+    cause: errorDetails(cause),
+    stack: error instanceof Error ? error.stack : undefined
+  };
+}
+
 function authAdapter(): Adapter {
   const base = PrismaAdapter(prisma);
 
@@ -61,34 +95,52 @@ function authAdapter(): Adapter {
     ...base,
     async createUser(data) {
       const email = data.email.toLowerCase();
+      const role: UserRole = isAdminEmail(email) ? "ADMIN" : "USER";
       console.info("[auth] createUser start", {
         email,
-        role: isAdminEmail(email) ? "ADMIN" : "USER",
+        role,
         hasName: Boolean(data.name?.trim()),
         hasImage: Boolean(data.image)
       });
-      try {
-        const user = await prisma.user.create({
-          data: {
+
+      for (let attempt = 1; attempt <= USERNAME_CREATE_ATTEMPTS; attempt += 1) {
+        try {
+          const username = await uniqueUsername(email);
+          const user = await prisma.user.create({
+            data: {
+              email,
+              username: attempt === 1 ? username : `${username}_${crypto.randomUUID().slice(0, 6)}`.slice(0, 40),
+              displayName: data.name?.trim().slice(0, 48) || fallbackNameForEmail(email),
+              avatarUrl: data.image || null,
+              emailVerified: data.emailVerified,
+              role,
+              lastLoginAt: new Date()
+            }
+          });
+          console.info("[auth] createUser success", { email: user.email, userId: user.id, role: user.role, attempt });
+          return toAdapterUser(user);
+        } catch (error) {
+          const retryableUsernameRace =
+            error instanceof Prisma.PrismaClientKnownRequestError &&
+            error.code === "P2002" &&
+            Array.isArray(error.meta?.target) &&
+            error.meta.target.includes("username");
+
+          console.error("[auth] createUser failed", {
             email,
-            username: await uniqueUsername(email),
-            displayName: data.name?.trim().slice(0, 48) || fallbackNameForEmail(email),
-            avatarUrl: data.image || null,
-            emailVerified: data.emailVerified,
-            role: isAdminEmail(email) ? "ADMIN" : "USER",
-            lastLoginAt: new Date()
+            role,
+            attempt,
+            retryableUsernameRace,
+            error: errorDetails(error)
+          });
+
+          if (!retryableUsernameRace || attempt === USERNAME_CREATE_ATTEMPTS) {
+            throw error;
           }
-        });
-        console.info("[auth] createUser success", { email: user.email, userId: user.id, role: user.role });
-        return toAdapterUser(user);
-      } catch (error) {
-        console.error("[auth] createUser failed", {
-          email,
-          role: isAdminEmail(email) ? "ADMIN" : "USER",
-          error
-        });
-        throw error;
+        }
       }
+
+      throw new Error("User creation could not be completed.");
     },
     async getUser(id) {
       const user = await prisma.user.findUnique({ where: { id } });
@@ -119,6 +171,30 @@ function authAdapter(): Adapter {
         email: account?.user.email ?? null
       });
       return account ? toAdapterUser(account.user) : null;
+    },
+    async linkAccount(account) {
+      console.info("[auth] linkAccount start", {
+        provider: account.provider,
+        userId: account.userId,
+        providerAccountId: account.providerAccountId
+      });
+      try {
+        await base.linkAccount?.(account);
+        console.info("[auth] linkAccount success", {
+          provider: account.provider,
+          userId: account.userId,
+          providerAccountId: account.providerAccountId
+        });
+        return;
+      } catch (error) {
+        console.error("[auth] linkAccount failed", {
+          provider: account.provider,
+          userId: account.userId,
+          providerAccountId: account.providerAccountId,
+          error: errorDetails(error)
+        });
+        throw error;
+      }
     },
     async updateUser(data) {
       const user = await prisma.user.update({
@@ -175,6 +251,28 @@ const nextAuth = NextAuth({
   adapter: isDemoMode ? undefined : authAdapter(),
   secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET ?? env.AUTH_SECRET,
   trustHost: true,
+  debug: process.env.NODE_ENV !== "production" || process.env.AUTH_DEBUG === "true",
+  logger: {
+    error(error) {
+      console.error("[authjs] error", {
+        code: error.name,
+        message: error.message,
+        cause: errorDetails(error.cause),
+        stack: error.stack
+      });
+    },
+    warn(code) {
+      console.warn("[authjs] warning", { code });
+    },
+    debug(code, metadata) {
+      if (process.env.NODE_ENV !== "production" || process.env.AUTH_DEBUG === "true") {
+        console.info("[authjs] debug", {
+          code,
+          ...authLoggerMeta(metadata)
+        });
+      }
+    }
+  },
   session: { strategy: "jwt" },
   pages: {
     signIn: "/sign-in"
