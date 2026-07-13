@@ -143,6 +143,7 @@ const oauthProviders = googleAuthConfigured
       Google({
         clientId: env.GOOGLE_CLIENT_ID!,
         clientSecret: env.GOOGLE_CLIENT_SECRET!,
+        allowDangerousEmailAccountLinking: true,
         profile(profile) {
           const googleProfile = profile as Prisma.JsonObject & {
             sub?: unknown;
