@@ -5,7 +5,7 @@ import { safeAuthCallbackUrl } from "@/lib/auth-callback";
 import { isDemoMode } from "@/lib/env";
 
 type SignInPageProps = {
-  searchParams: Promise<{ callbackUrl?: string }>;
+  searchParams: Promise<{ callbackUrl?: string; error?: string }>;
 };
 
 export default async function SignInPage({ searchParams }: SignInPageProps) {
@@ -13,13 +13,21 @@ export default async function SignInPage({ searchParams }: SignInPageProps) {
 
   const params = await searchParams;
   const callbackUrl = safeAuthCallbackUrl(params.callbackUrl);
-  console.log("[auth] sign-in callbackUrl", callbackUrl);
+  if (params.error) {
+    console.warn("[auth] sign-in page OAuth error", {
+      error: params.error,
+      callbackUrl
+    });
+  } else {
+    console.log("[auth] sign-in callbackUrl", callbackUrl);
+  }
 
   return (
     <div className="flex min-h-[calc(100vh-86px)] items-center justify-center px-4 py-10">
       <SignInForm
         callbackUrl={callbackUrl}
         googleEnabled={googleAuthConfigured}
+        authError={params.error ?? null}
       />
     </div>
   );
