@@ -88,6 +88,16 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
             </div>
           </header>
           <main className="min-h-screen pt-16 md:pt-[86px]">{children}</main>
+          <footer className="border-t border-border/70 bg-background/95">
+            <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-6 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+              <p>&copy; 2026 Own a Hex of Earth.</p>
+              <nav className="flex flex-wrap gap-x-5 gap-y-2" aria-label="Legal links">
+                <Link className="transition hover:text-foreground" href="/privacy">Privacy Policy</Link>
+                <Link className="transition hover:text-foreground" href="/terms">Terms of Service</Link>
+                <Link className="transition hover:text-foreground" href="/contact">Contact</Link>
+              </nav>
+            </div>
+          </footer>
         </Providers>
       </body>
     </html>
