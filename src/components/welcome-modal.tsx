@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { trackGaEvent } from "@/lib/analytics";
 
 const ONBOARDING_KEY = "onboardingCompleted";
 
@@ -32,6 +33,9 @@ export function WelcomeModal() {
       // Closing the current modal still works when storage is unavailable.
     }
     setOpen(false);
+    trackGaEvent("onboarding_completed", {
+      action: startExploring ? "start_exploring" : "dismiss"
+    });
 
     if (startExploring) {
       document.getElementById("world-map")?.scrollIntoView({ behavior: "smooth", block: "start" });

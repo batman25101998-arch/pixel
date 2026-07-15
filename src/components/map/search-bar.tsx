@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { useMapStore } from "@/stores/map-store";
 import { isClientDemoMode, DEMO_USER } from "@/lib/demo";
 import { searchDemo, type DemoSearchResult } from "@/lib/demo-storage";
+import { trackGaEvent } from "@/lib/analytics";
 
 type SearchResult = {
   type: "hex" | "user" | "geocode";
@@ -148,6 +149,11 @@ export function SearchBar() {
     if (isClientDemoMode) {
       const demoResults = searchDemo(normalized).map(resultFromDemo);
       if (demoResults.length) {
+        trackGaEvent("search_used", {
+          query: normalized,
+          result_count: demoResults.length,
+          source: "demo"
+        });
         if (isValidCell(normalized) || coordinateQuery || demoResults.length === 1) selectResult(demoResults[0]);
         else setResults(demoResults);
         return;
@@ -161,10 +167,25 @@ export function SearchBar() {
       const data = (await response.json()) as { results?: SearchResult[] };
       const nextResults = data.results ?? [];
       if (!nextResults.length) {
+        trackGaEvent("search_used", {
+          query: normalized,
+          result_count: 0,
+          source: "api"
+        });
         setError("No results found.");
       } else if (isValidCell(normalized) || coordinateQuery || nextResults.length === 1) {
+        trackGaEvent("search_used", {
+          query: normalized,
+          result_count: nextResults.length,
+          source: "api"
+        });
         selectResult(nextResults[0]);
       } else {
+        trackGaEvent("search_used", {
+          query: normalized,
+          result_count: nextResults.length,
+          source: "api"
+        });
         setResults(nextResults);
       }
     } catch {

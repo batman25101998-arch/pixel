@@ -7,6 +7,7 @@ import { useSession } from "next-auth/react";
 import { Check, Layers3, SlidersHorizontal, X } from "lucide-react";
 import { DEMO_USER, isClientDemoMode } from "@/lib/demo";
 import { getDemoOwnedHexes } from "@/lib/demo-storage";
+import { trackGaEvent } from "@/lib/analytics";
 import { useMapStore, type SelectedHex } from "@/stores/map-store";
 
 const sourceId = "earth-hexes";
@@ -859,6 +860,11 @@ export function EarthMap() {
           }
         }
         if (availableOnlyRef.current && selection.purchased) return;
+        trackGaEvent("hex_selected", {
+          h3Index: selection.h3Index,
+          status: selection.purchased?.status ?? "AVAILABLE",
+          owned: Boolean(selection.purchased)
+        });
         openHexOrZoom(selection);
 
         return;
@@ -881,6 +887,11 @@ export function EarthMap() {
           return;
         }
       }
+      trackGaEvent("hex_selected", {
+        h3Index: selection.h3Index,
+        status: selection.purchased?.status ?? "AVAILABLE",
+        owned: Boolean(selection.purchased)
+      });
       openHexOrZoom(selection);
     });
 

@@ -15,6 +15,7 @@ import { DEMO_USER, isClientDemoMode } from "@/lib/demo";
 import { buyDemoHex, getDemoOwnedHexes, updateDemoHexMetadata } from "@/lib/demo-storage";
 import { redirectToSignIn } from "@/lib/client-auth";
 import { apiErrorMessage } from "@/lib/api-error";
+import { trackGaEvent } from "@/lib/analytics";
 import { useMapStore } from "@/stores/map-store";
 
 type Certificate = {
@@ -182,6 +183,11 @@ export function PurchasePanel() {
         if (cancelled) return;
         if (data.status === "SUCCEEDED" && data.certificate) {
           const confirmedCertificate = data.certificate;
+          trackGaEvent("purchase_completed", {
+            h3Index: confirmedCertificate.h3Index,
+            value: confirmedCertificate.priceCents / 100,
+            currency: "USD"
+          });
           setCertificate(confirmedCertificate);
           setSelectedHex({
             h3Index: confirmedCertificate.h3Index,
@@ -284,6 +290,12 @@ export function PurchasePanel() {
         priceCents: price,
         purchaseDate
       };
+      trackGaEvent("purchase_completed", {
+        h3Index: selectedHex.h3Index,
+        value: price / 100,
+        currency: "USD",
+        demo: true
+      });
       setCertificate(demoCertificate);
       setSelectedHex({
         h3Index: selectedHex.h3Index,
@@ -320,6 +332,10 @@ export function PurchasePanel() {
         if (!uploadResponse.ok || !uploadData.imageUrl) throw new Error(uploadData.error ?? "Image could not be uploaded.");
         checkoutImageUrl = uploadData.imageUrl;
         console.info("[purchase-image] blob URL", checkoutImageUrl);
+        trackGaEvent("image_uploaded", {
+          h3Index: selectedHex.h3Index,
+          context: "purchase"
+        });
         setPurchaseStep("Creating your hex...");
       } catch (uploadError) {
         setBusy(false);
@@ -347,6 +363,11 @@ export function PurchasePanel() {
       setError(typeof data.error === "string" ? data.error : "Checkout could not be started.");
       return;
     }
+    trackGaEvent("stripe_checkout_opened", {
+      h3Index: selectedHex.h3Index,
+      value: price / 100,
+      currency: "USD"
+    });
     setPurchaseStep("Saving forever...");
     await new Promise((resolve) => window.setTimeout(resolve, 150));
     window.location.href = data.checkoutUrl;
@@ -388,6 +409,9 @@ export function PurchasePanel() {
           externalLink: externalLink || null
         }
       });
+      trackGaEvent("hex_updated", {
+        h3Index: selectedHex.h3Index
+      });
       refresh();
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Hex details could not be saved.");
@@ -406,6 +430,16 @@ export function PurchasePanel() {
     }
     setCertificate((current) => current ? { ...current, imageUrl: nextImageUrl } : current);
     refresh();
+  }
+
+  function startPurchaseConfirmation() {
+    if (!selectedHex) return;
+    trackGaEvent("purchase_started", {
+      h3Index: selectedHex.h3Index,
+      value: price / 100,
+      currency: "USD"
+    });
+    setConfirmPurchase(true);
   }
 
   function choosePurchaseImage(file?: File) {
@@ -585,7 +619,7 @@ export function PurchasePanel() {
               <p className="text-sm text-muted-foreground">This collectible belongs permanently to its owner.</p>
             ) : canCustomize ? (
               <div className="sticky bottom-[-1.25rem] z-10 -mx-5 -mb-5 border-t border-border bg-[#0b1117] p-4 pb-[max(1rem,env(safe-area-inset-bottom))] md:static md:m-0 md:border-0 md:bg-transparent md:p-0">
-                <Button className="h-12 w-full md:h-10" onClick={() => setConfirmPurchase(true)} disabled={busy}>
+                <Button className="h-12 w-full md:h-10" onClick={startPurchaseConfirmation} disabled={busy}>
                   {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShoppingCart className="h-4 w-4" />}
                   {busy ? purchaseStep ?? "Creating your hex..." : "Buy this Hex - $1"}
                 </Button>

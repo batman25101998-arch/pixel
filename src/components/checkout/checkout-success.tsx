@@ -5,6 +5,7 @@ import Link from "next/link";
 import { CheckCircle2, Copy, Loader2, Share2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { trackGaEvent } from "@/lib/analytics";
 
 type CheckoutResult = {
   status: "REQUIRES_PAYMENT" | "PROCESSING" | "SUCCEEDED" | "FAILED" | "REFUNDED" | "CANCELED" | "PENDING";
@@ -15,6 +16,7 @@ export function CheckoutSuccess({ sessionId }: { sessionId: string }) {
   const [result, setResult] = useState<CheckoutResult>({ status: "PENDING" });
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [completionTracked, setCompletionTracked] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -53,6 +55,16 @@ export function CheckoutSuccess({ sessionId }: { sessionId: string }) {
   const mapHref = result.certificate?.h3Index
     ? `/?hex=${encodeURIComponent(result.certificate.h3Index)}`
     : "/";
+
+  useEffect(() => {
+    if (!completed || completionTracked) return;
+    trackGaEvent("purchase_completed", {
+      h3Index: result.certificate?.h3Index,
+      value: 1,
+      currency: "USD"
+    });
+    setCompletionTracked(true);
+  }, [completed, completionTracked, result.certificate?.h3Index]);
 
   function shareUrl() {
     return new URL(mapHref, window.location.origin).toString();

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { trackGaEvent } from "@/lib/analytics";
 import { safeAuthCallbackUrl } from "@/lib/auth-callback";
 
 type SignInFormProps = {
@@ -85,6 +86,7 @@ export function SignInForm({ googleEnabled, callbackUrl, authError }: SignInForm
       userAgent: window.navigator.userAgent,
       authError: authError ?? null
     });
+    trackGaEvent("sign_in_google");
     if (googleTimeoutRef.current !== null) window.clearTimeout(googleTimeoutRef.current);
     googleTimeoutRef.current = window.setTimeout(() => {
       if (navigationStartedRef.current) return;

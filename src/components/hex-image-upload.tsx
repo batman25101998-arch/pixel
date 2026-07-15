@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ImageUp, Loader2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { trackGaEvent } from "@/lib/analytics";
 
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
@@ -79,6 +80,10 @@ export function HexImageUpload({ hexId, imageUrl, disabled = false, onImageChang
       const data = (await response.json()) as { imageUrl?: string; error?: string };
       if (!response.ok || !data.imageUrl) throw new Error(data.error ?? "Image could not be uploaded.");
       onImageChange(data.imageUrl);
+      trackGaEvent("image_uploaded", {
+        hexId,
+        context: "hex_edit"
+      });
       setFile(null);
       setPreviewUrl(null);
       if (inputRef.current) inputRef.current.value = "";

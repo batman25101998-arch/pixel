@@ -1,11 +1,15 @@
 import type { Metadata, Viewport } from "next";
 import Link from "next/link";
+import Script from "next/script";
+import { Suspense } from "react";
 import { Earth, UserCircle } from "lucide-react";
 import { auth } from "@/auth";
+import { GoogleAnalyticsPageView } from "@/components/analytics/google-analytics-page-view";
 import { Providers } from "@/components/providers";
 import { UserMenu } from "@/components/auth/user-menu";
 import { Button } from "@/components/ui/button";
 import { DEMO_USER } from "@/lib/demo";
+import { GA_MEASUREMENT_ID } from "@/lib/analytics";
 import { isDemoMode } from "@/lib/env";
 import "./globals.css";
 
@@ -54,9 +58,29 @@ export const viewport: Viewport = {
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const session = await auth();
+  const loadGoogleAnalytics = process.env.NODE_ENV === "production";
   return (
     <html lang="en" className="dark">
       <body>
+        {loadGoogleAnalytics ? (
+          <>
+            <Script
+              src={`https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}`}
+              strategy="afterInteractive"
+            />
+            <Script id="google-analytics" strategy="afterInteractive">
+              {`
+                window.dataLayer = window.dataLayer || [];
+                function gtag(){dataLayer.push(arguments);}
+                gtag('js', new Date());
+                gtag('config', '${GA_MEASUREMENT_ID}', { send_page_view: false });
+              `}
+            </Script>
+            <Suspense fallback={null}>
+              <GoogleAnalyticsPageView />
+            </Suspense>
+          </>
+        ) : null}
         <Providers session={session}>
           <header className="fixed inset-x-0 top-0 z-40 h-16 border-b border-border/70 bg-background/88 backdrop-blur md:h-[86px]">
             <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-3 md:h-[86px] md:px-4">
